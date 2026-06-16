@@ -65,6 +65,10 @@ async function openInputStep(page: Page, label: string) {
     .click()
 }
 
+async function switchToTechnicalMode(page: Page) {
+  await page.getByRole('button', { name: /技術詳細モード/ }).click()
+}
+
 async function rsrpValues(page: Page): Promise<number[]> {
   const values = await page.locator('.rsrp-card strong').allTextContents()
 
@@ -78,9 +82,14 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
   await expect(
     page.getByRole('heading', { name: 'ローカル5G 窓面電波改善シミュレータ' }),
   ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /営業用簡易モード/ }),
+  ).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: '入力条件' })).toBeVisible()
-  await expect(page.getByRole('tablist', { name: '入力ステップ' })).toBeVisible()
-  await expect(page.getByText('迷わない入力順')).toBeVisible()
+  await expect(page.getByLabel('営業用簡易入力')).toBeVisible()
+  await expect(page.getByLabel('営業用結果サマリー')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'PDFレポート出力' })).toBeVisible()
+  await expect(page.getByText('実測前の仮説整理ツール')).toBeVisible()
 
   await expect(scenarioCard(page, '窓なし')).toBeVisible()
   await expect(scenarioCard(page, '窓あり')).toBeVisible()
@@ -90,6 +99,9 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
   expect(noWindow).toBeGreaterThan(withNamigate)
   expect(withNamigate).toBeGreaterThan(withWindow)
 
+  await switchToTechnicalMode(page)
+  await expect(page.getByRole('tablist', { name: '入力ステップ' })).toBeVisible()
+  await expect(page.getByText('迷わない入力順')).toBeVisible()
   await expect(page.getByRole('tablist', { name: '表示切り替え' })).toBeVisible()
   await expect(page.getByRole('tab', { name: /概要/ })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('region', { name: '読み方ガイド' })).toBeVisible()
@@ -156,12 +168,33 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
     page.getByText('IEEE Communications Society RIS Best Readings'),
   ).toBeVisible()
   await expect(
-    page.getByText('これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである'),
+    page
+      .getByLabel('免責・利用範囲')
+      .getByText('本シミュレータは、ローカル5Gの窓面透過改善効果を概算するための技術検討ツールです'),
   ).toBeVisible()
+})
+
+test('営業用簡易モードからPDFレポート画面を開ける', async ({ page }) => {
+  await page.goto('/')
+
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'PDFレポート出力' }).click()
+  const reportPage = await popupPromise
+
+  await expect(
+    reportPage.getByRole('heading', {
+      name: 'ローカル5G 窓面透過改善シミュレーションレポート',
+    }),
+  ).toBeVisible()
+  await expect(reportPage.getByText('スタッフ株式会社')).toBeVisible()
+  await expect(reportPage.getByText('免責・利用範囲')).toBeVisible()
+  await expect(reportPage.getByText('RSRP、SINR、RSRQ')).toBeVisible()
+  await reportPage.close()
 })
 
 test('入力変更でプリセット値と可視化ラベルが更新される', async ({ page }) => {
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await openInputStep(page, '窓・室内')
   await controlSelect(page, '窓種別').selectOption('single')
@@ -191,6 +224,7 @@ test('入力変更でプリセット値と可視化ラベルが更新される',
 
 test('数値パラメータをキーボードで直接入力できる', async ({ page }) => {
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await openInputStep(page, '窓・室内')
   const indoorDistanceInput = controlInput(page, '室内距離')
@@ -219,6 +253,7 @@ test('数値パラメータをキーボードで直接入力できる', async ({
 
 test('無線機詳細とナミゲート効果パラメータで推定値が変わる', async ({ page }) => {
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await expect(controlSelect(page, '無線機プリセット')).toHaveValue('custom')
   await controlSelect(page, '無線機プリセット').selectOption('sub6ExternalAntennaModule')
@@ -301,6 +336,7 @@ test('CSV実測点を取り込み校正とレポート作成ができる', async
     origin: 'http://127.0.0.1:4173',
   })
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await openTab(page, '実測データ')
   await page.getByRole('button', { name: 'サンプルCSVを読み込み' }).click()
@@ -342,6 +378,7 @@ test('CSV実測点を取り込み校正とレポート作成ができる', async
 
 test('複数入力パターンを保存して実測値ごと切り替えられる', async ({ page }) => {
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   const panel = patternPanel(page)
   await expect(panel).toContainText('入力・実測・CSV・プロトコルを一括切替')
@@ -384,6 +421,7 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
     origin: 'http://127.0.0.1:4173',
   })
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await openInputStep(page, '実測・保存')
   await controlInput(page, '観測N数').fill('25')
@@ -445,6 +483,7 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
 
 test('入力内容を自動保存してリロード後も復元できる', async ({ page }) => {
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await controlInput(page, '周波数').fill('4820')
   await openInputStep(page, '実測・保存')
@@ -473,6 +512,7 @@ test('入力内容を自動保存してリロード後も復元できる', async
 test('モバイル幅でも3Dビューと主要カードが横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
+  await switchToTechnicalMode(page)
 
   await openTab(page, '位置・分布')
   const canvas = page.locator('.position-3d-canvas')

@@ -41,6 +41,7 @@ type ActiveView =
   | 'analysis'
   | 'evidence'
 type InputStepId = 'radio' | 'windowRoom' | 'namigate' | 'measurement' | 'review'
+type AppMode = 'sales' | 'technical'
 type ModulePresetId =
   | 'custom'
   | 'sub6IndoorSmallCell'
@@ -282,6 +283,7 @@ type ProtocolDraft = Partial<Omit<TestProtocol, 'checklist'>> & {
 type AutoSaveDraft = {
   version: 1
   savedAt: string
+  appMode: AppMode
   settings: Settings
   measuredRsrpValues: MeasuredRsrpValues
   theoryRsrpValues: TheoryRsrpValues
@@ -295,6 +297,28 @@ type AutoSaveDraft = {
 
 const MAIN_COLOR = '#0071BD'
 const CONNECTED_THRESHOLD_DEFAULT = -100
+const REPORT_TITLE = 'ローカル5G 窓面透過改善シミュレーションレポート'
+const DISCLAIMER_FULL =
+  '本シミュレータは、ローカル5Gの窓面透過改善効果を概算するための技術検討ツールです。表示結果は保証値ではなく、実際の通信品質は基地局仕様、端末、アンテナ、窓材、設置条件、周辺反射、干渉、測定方法により変動します。正式評価には現地実測による確認が必要です。現地実測値を入力して校正することで、検討条件に近い仮説へ精度を高められます。'
+const DISCLAIMER_SHORT =
+  '表示結果は保証値ではなく、実測前の仮説整理用です。現地実測を入力すると、条件に合わせて精度を高められます。'
+
+const DISPLAY_MODES: {
+  id: AppMode
+  label: string
+  description: string
+}[] = [
+  {
+    id: 'sales',
+    label: '営業用簡易モード',
+    description: '初回説明・展示会向け',
+  },
+  {
+    id: 'technical',
+    label: '技術詳細モード',
+    description: '実測比較・校正向け',
+  },
+]
 
 const WINDOW_PRESETS: {
   id: WindowPresetId
@@ -867,6 +891,36 @@ const RESEARCH_COLUMNS: Array<{
     body:
       'ローカル5Gは周波数、設置場所、自己土地/他者土地、同期条件、空中線電力など制度面の確認が必要です。実証ではさらに、端末、アンテナ向き、測定高さ、N数、平均化時間、人流、遮蔽物、天候、窓位置を残すと、後からAI分析や再測定で原因を切り分けやすくなります。',
   },
+  {
+    title: '日本の制度確認は最初に分ける',
+    summary: 'シミュレーション値と免許・運用条件の適合判断は別タスクとして扱います。',
+    body:
+      '日本のローカル5Gは免許制で、主な周波数候補、設置場所、自己土地/他者土地、同期条件、空中線電力、EIRP、干渉調整を個別に確認します。このアプリはリンクバジェットの仮説整理用であり、法令上限や免許条件への適合を判定しません。商談では「技術的に届く可能性」と「制度上設置できる条件」を分けて説明すると誤解が減ります。',
+  },
+  {
+    title: 'EIRPは営業資料で誤解されやすい',
+    summary: 'EIRPは送信出力だけでなく、アンテナ利得や給電損失を含む実効値です。',
+    body:
+      '同じ送信出力でも、高利得アンテナを使うと特定方向のEIRPは大きくなります。一方、ケーブル、分配器、コネクタ、実装状態で損失が入ります。実地測定では、申請値、機器仕様、実際の給電構成、アンテナ方向をそろえて記録しないと、窓損失やナミゲート効果と送信条件の差が混ざってしまいます。',
+  },
+  {
+    title: '7-24GHzと6G前段の議論',
+    summary: '3GPP Release 19以降では、Sub6とミリ波の間の周波数帯もチャネルモデル上の関心が高まっています。',
+    body:
+      'ローカル5Gの代表帯域は4.7GHz帯と28GHz帯ですが、標準化や研究ではFR3相当の中間周波数帯、屋外-屋内、RIS/メタサーフェス、NTN/AI支援などが議論されています。窓面透過は周波数と建材に強く依存するため、入力周波数を固定して比較し、周波数を変える場合は別パターンとして保存する運用が向いています。',
+  },
+  {
+    title: '実測の3状態は同じ場所でそろえる',
+    summary: '窓開放、窓閉鎖、窓閉鎖＋ナミゲートは、端末位置と向きを固定して差分で読みます。',
+    body:
+      'ナミゲート効果は「窓ありから何dB上がったか」と「窓なしとの差を何%戻したか」です。位置が数十cm変わるだけでマルチパスが変わるため、三脚や治具で測定高さ・向き・窓面からの距離を固定し、各状態でN数と平均化時間をそろえると、dB差分の説明が強くなります。',
+  },
+  {
+    title: '窓面改善はSINRまで見る',
+    summary: 'RSRP改善があっても、干渉や反射でSINRが追従しないことがあります。',
+    body:
+      'RSRPは信号の強さを見やすい一方、通信品質やスループットはSINR、RSRQ、端末カテゴリ、基地局負荷、UL条件にも依存します。展示会ではRSRPと回復率を大きく見せ、技術検討ではCSVにSINR、RSRQ、DL/ULを入れて、強度改善が品質改善に結びついたかを確認します。',
+  },
 ]
 
 const VIEW_TABS: {
@@ -916,11 +970,11 @@ const HELP_TEXT: Record<string, string> = {
   RMSE:
     '推定と実測のズレを二乗平均平方根で表した値です。小さいほどモデルが現場に合っています。',
   '無線機プリセット': '汎用的な基地局・通信モジュール構成の初期値です。メーカー仕様や免許条件を保証するものではありません。',
-  '周波数': '電波の周波数です。標準的な5Gチャネルモデルでは周波数が建物侵入損失、回折、反射、窓透過に強く効きます。高い周波数ほど窓や遮蔽物の影響が目立ちやすくなります。',
+  '周波数': '電波の周波数です。日本のローカル5G検討では4.6-4.9GHz帯、28.2-29.1GHz帯をまず確認します。標準的な5Gチャネルモデルでは周波数が建物侵入損失、回折、反射、窓透過に強く効くため、実証で使う中心周波数に合わせます。',
   'EIRP計算方式': 'EIRPを直接入れるか、送信出力やアンテナ利得から計算するかを選びます。',
-  'EIRP直接入力': '送信出力、アンテナ利得、給電損失をまとめた実効的な送信電力です。免許条件上のEIRP制限とは別に、正式判断は最新の総務省資料で確認してください。',
-  '送信出力': '無線機から出る空中線電力相当の入力値です。詳細EIRP計算方式のときに使い、法規制上は無線局免許・技術基準の確認対象になります。',
-  '送信アンテナ利得': '送信アンテナが特定方向へ電波を集中させる効果です。EIRPは概ね送信出力＋アンテナ利得−給電損失で大きくなります。',
+  'EIRP直接入力': '送信出力、アンテナ利得、給電損失をまとめた実効的な送信電力です。仕様書や免許申請条件にEIRPがある場合はその値を優先します。法制度上の上限適合は本アプリでは判定せず、最新の総務省資料と免許条件で確認してください。',
+  '送信出力': '無線機から出る空中線電力相当の入力値です。詳細EIRP計算方式のときに使います。機器仕様、設定値、実際の出力制限が異なることがあるため、実証前に無線機設定と申請条件を照合します。',
+  '送信アンテナ利得': '送信アンテナが特定方向へ電波を集中させる効果です。EIRPは概ね送信出力＋アンテナ利得−給電損失で大きくなります。窓面へ正しく向いていない場合は指向ずれ損失も合わせて入れます。',
   '送信アンテナ高': '屋外側の送信アンテナ中心の地上高です。屋外-屋内リンクでは高さ差が見通し、入射角、屋外3D距離に効くため、仮値ではなく現地の設置高を入れると比較が安定します。',
   '送信給電損失': '無線機からアンテナまでのケーブルなどで失われる量です。',
   'その他送信損失': 'コネクタ、分配器、設置条件など送信側の追加損失です。',
@@ -932,22 +986,22 @@ const HELP_TEXT: Record<string, string> = {
   '偏波不整合損失': '送受信アンテナの偏波向きがずれることで発生する損失です。',
   'フェージングマージン': '反射や人体遮蔽などのばらつきを保守的に見込む余裕です。',
   '屋外伝搬モデル': '送信機から窓までの屋外区間をどう見積もるかを選びます。FSPLは見通し基準、奥村-秦は市街地/郊外/開放地の経験式です。ローカル5Gでは適用範囲外表示を必ず確認してください。',
-  '屋外距離': '送信機から窓面までの水平距離です。送信アンテナ高と窓中心高を加味して屋外3D斜距離へ変換します。',
+  '屋外距離': '送信機から窓面までの水平距離です。展示会デモでは100mなどの仮値で十分ですが、実証では図面、地図、レーザー距離計で確認した値を入れます。送信アンテナ高と窓中心高を加味して屋外3D斜距離へ変換します。',
   '屋外遮蔽損失': '屋外側の樹木、車両、仮設物、見通し悪化などを追加損失として見込む値です。',
   '地面反射補正': '地面反射などで強め/弱めに見込む補正値です。まず0dBから始めます。',
   '窓種別': '代表的な窓損失をプリセットから選べます。建物侵入損失の標準モデルでは、従来型建物と熱効率の高い建物を分けて扱うため、Low-Eや金属膜入りは別カテゴリとして見ます。',
-  '窓損失': '窓ガラスを通過するときに失われる量です。Low-Eや金属膜入りでは、熱制御膜が電波透過を大きく下げる場合があるため、実測で校正する優先度が高い項目です。',
+  '窓損失': '窓ガラスを通過するときに失われる量です。通常ガラスは数dB、複層は10dB級、Low-Eや金属膜入りは30-40dB級を初期仮説にし、窓開放/窓閉鎖の実測差で校正します。',
   '窓幅': '窓の横幅です。図示とヒートマップの窓表示に使います。',
   '窓高さ': '窓の高さです。3D図の窓サイズに使います。',
   '窓中心高': '窓またはナミゲート中心の地上高です。送信・受信アンテナ高との差から3D距離と入射の説明を合わせます。',
-  '入射角': '電波が窓へ入る角度です。90度が正面入射で、浅い角度ほど損失を大きく見込みます。実測研究では角度と偏波の違いが窓透過に効くため、現地の方位を確認します。',
+  '入射角': '電波が窓へ入る角度です。90度が正面入射で、60度は軽微、45度以下は悪化が目立つ仮定から始めます。実測では基地局方位、窓面方位、偏波をそろえて記録します。',
   '部屋幅': '窓に沿った横方向の部屋寸法です。接続可能面積の計算に使います。',
   '部屋奥行': '窓から室内奥方向の部屋寸法です。ヒートマップ範囲と到達距離評価に使います。',
-  '室内距離': '窓から受信点までの水平距離です。受信アンテナ高と窓中心高を加味して室内3D距離へ変換します。',
+  '室内距離': '窓から受信点までの水平距離です。商談では代表点、実証では窓際・中央・奥側の複数点を測ると到達距離を説明しやすくなります。受信アンテナ高と窓中心高を加味して室内3D距離へ変換します。',
   '屋内伝搬指数': '室内で距離が伸びたときの減衰の強さです。屋外-屋内モデルでは、窓通過後の室内奥行損失を別に見ます。什器や間仕切りが多いほど大きめに置きます。',
   '屋内遮蔽損失': '什器、壁、人体、パーティションなど室内側で一律に見込む追加損失です。',
   '改善量プリセット': 'ナミゲート改善量の仮定値を選びます。実測に合わせる場合は改善量を直接変更します。',
-  'ナミゲート改善量': 'ナミゲートで窓あり状態から上積みする改善量の仮定値です。周波数、偏波、入射角、設置位置に依存するため、まず仮説値として入れ、実測比較で校正します。',
+  'ナミゲート改善量': 'ナミゲートで窓あり状態から上積みする改善量の仮定値です。保守3dB、標準10dB、Low-E改善例25dBは比較用の初期値で、保証値ではありません。周波数、偏波、入射角、設置位置に依存するため、実測比較で校正します。',
   'サイズ幅': 'ナミゲートの幅です。面積補正と図示に使います。',
   'サイズ高さ': 'ナミゲートの高さです。面積補正と図示に使います。',
   '面積補正係数': 'ナミゲート面積による改善量の効き具合を調整します。開口・周期構造・有効面積の影響を簡易的に表す係数です。',
@@ -957,8 +1011,8 @@ const HELP_TEXT: Record<string, string> = {
   '追加損失': '取り付け状態や位置ずれなどで差し引く損失です。',
   '最大総改善量': 'ナミゲートによる総改善量の上限です。',
   '接続しきい値': 'このRSRP以上なら接続可能とみなす判定基準です。実運用ではRSRPだけでなくSINR、RSRQ、スループットも合わせて確認します。',
-  '測定高さ': '実測時の端末またはアンテナ高さです。比較時は高さを固定すると誤差を読みやすくなります。',
-  '観測N数': '手入力する実測RSRPを作る元データ数です。N=1は瞬間値に近く、フェージングや測定更新周期の影響を受けやすいため、比較評価では複数サンプルの平均または中央値を使います。',
+  '測定高さ': '実測時の端末またはアンテナ高さです。机上測定なら約1.0-1.2m、手持ちなら実際の保持高さ、設備アンテナなら設置高を入れます。比較時は高さを固定すると誤差を読みやすくなります。',
+  '観測N数': '手入力する実測RSRPを作る元データ数です。N=1は瞬間値に近く、比較評価ではN=10以上、できればN=30以上の平均または中央値を使います。各状態で同じN数にすると差分説明が安定します。',
   '平均化時間': '1点あたり何秒測って平均するかです。短すぎると瞬間的なフェージングの影響が残ります。',
   'サンプル数/点': '1つの測定点で記録するサンプル数です。ばらつき確認に使います。',
 }
@@ -2347,6 +2401,221 @@ function formatMultiplier(value: number) {
   return `${numberFormatter.format(value)}倍`
 }
 
+function escapeHtml(value: string | number) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function getConnectionLabel(rsrpDbm: number, thresholdDbm: number) {
+  return rsrpDbm >= thresholdDbm ? '接続可能の目安' : 'しきい値未満'
+}
+
+function buildSalesComment({
+  noWindowRsrp,
+  withWindowRsrp,
+  withNamigateRsrp,
+  recoveryRate,
+  thresholdDbm,
+}: {
+  noWindowRsrp: number
+  withWindowRsrp: number
+  withNamigateRsrp: number
+  recoveryRate: number
+  thresholdDbm: number
+}) {
+  const windowDropDb = Math.max(noWindowRsrp - withWindowRsrp, 0)
+  const namigateGainDb = Math.max(withNamigateRsrp - withWindowRsrp, 0)
+  const connectionText = getConnectionLabel(withNamigateRsrp, thresholdDbm)
+
+  if (namigateGainDb <= 0.1) {
+    return `本条件では窓による低下が約${formatDb(
+      windowDropDb,
+    )}見込まれます。ナミゲート改善量を0dBにしているため、まず現地実測で窓損失と入射角の影響を確認する条件です。`
+  }
+
+  return `本条件では、窓損失により屋内側の受信レベルが約${formatDb(
+    windowDropDb,
+  )}低下しますが、ナミゲートにより約${formatDb(
+    namigateGainDb,
+  )}の回復を想定できます。窓なし状態への回復率は約${numberFormatter.format(
+    clamp(recoveryRate, 0, 100),
+  )}%で、判定は「${connectionText}」です。正式評価では現地実測を入れて校正します。`
+}
+
+function buildPrintReportHtml({
+  settings,
+  protocol,
+  scenarioResults,
+  fieldEffectRows,
+  fieldAidItems,
+  effectiveWindowLossDb,
+  angleLossDb,
+  totalNamigateGainDb,
+  appliedNamigateGainDb,
+  recoveryRate,
+  effectiveEirpDbm,
+  detailedEirpDbm,
+  receiverAdjustmentDb,
+  currentOutdoorPathLossDb,
+  currentIndoorLossDb,
+  salesComment,
+}: {
+  settings: Settings
+  protocol: TestProtocol
+  scenarioResults: ScenarioResult[]
+  fieldEffectRows: EffectSummaryRow[]
+  fieldAidItems: FieldAidItem[]
+  effectiveWindowLossDb: number
+  angleLossDb: number
+  totalNamigateGainDb: number
+  appliedNamigateGainDb: number
+  recoveryRate: number
+  effectiveEirpDbm: number
+  detailedEirpDbm: number
+  receiverAdjustmentDb: number
+  currentOutdoorPathLossDb: number
+  currentIndoorLossDb: number
+  salesComment: string
+}) {
+  const createdAt = new Date().toLocaleString('ja-JP')
+  const windowLabel =
+    WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId)?.label ??
+    '任意'
+  const namigateLabel =
+    NAMIGATE_PRESETS.find((preset) => preset.id === settings.namigatePresetId)
+      ?.label ?? '任意'
+  const rows = scenarioResults
+    .map(
+      (scenario) => `
+        <tr>
+          <td>${escapeHtml(scenario.label)}</td>
+          <td>${escapeHtml(formatDbm(scenario.rsrpDbm))}</td>
+          <td>${escapeHtml(formatArea(scenario.connectedAreaM2))}</td>
+          <td>${escapeHtml(formatMeters(scenario.maxReachM))}</td>
+          <td>${escapeHtml(getConnectionLabel(scenario.rsrpDbm, settings.connectionThresholdDbm))}</td>
+        </tr>`,
+    )
+    .join('')
+  const fieldRows = fieldEffectRows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.label)}</td>
+          <td>${escapeHtml(row.model)}</td>
+          <td>${escapeHtml(row.measured)}</td>
+          <td>${escapeHtml(row.theory)}</td>
+          <td>${escapeHtml(row.memo)}</td>
+        </tr>`,
+    )
+    .join('')
+  const checklistRows = fieldAidItems
+    .slice(0, 12)
+    .map(
+      (item) => `
+        <li><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(
+          item.memo,
+        )}</li>`,
+    )
+    .join('')
+
+  return `<!doctype html>
+  <html lang="ja">
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(REPORT_TITLE)}</title>
+      <style>
+        :root { color: #17202a; font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif; }
+        body { margin: 0; background: #eef3f8; }
+        main { max-width: 960px; margin: 0 auto; padding: 28px; background: #fff; }
+        header { border-bottom: 4px solid ${MAIN_COLOR}; padding-bottom: 16px; margin-bottom: 20px; }
+        h1 { font-size: 26px; margin: 6px 0; color: #0f3047; }
+        h2 { font-size: 17px; color: ${MAIN_COLOR}; margin: 22px 0 10px; }
+        .brand { color: #52616f; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+        .meta, .note { color: #52616f; font-size: 12px; line-height: 1.7; }
+        .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+        .summary article { border: 1px solid #d8e3ec; border-radius: 8px; padding: 12px; }
+        .summary span { display: block; color: #5c6d7a; font-size: 11px; }
+        .summary strong { display: block; font-size: 20px; margin-top: 4px; color: #12364f; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0 14px; }
+        th, td { border: 1px solid #d8e3ec; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #eef7fc; color: #15354a; }
+        ul { margin-top: 6px; padding-left: 18px; font-size: 12px; line-height: 1.7; }
+        .comment { border-left: 4px solid ${MAIN_COLOR}; background: #f1f8fc; padding: 12px 14px; line-height: 1.7; }
+        .disclaimer { border: 1px solid #cbdbe7; border-radius: 8px; padding: 12px 14px; background: #f7fafc; line-height: 1.7; }
+        .actions { margin: 16px 0 22px; }
+        button { background: ${MAIN_COLOR}; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+        @media print {
+          body { background: #fff; }
+          main { max-width: none; padding: 0; }
+          .actions { display: none; }
+          h2 { break-after: avoid; }
+          table, article, .comment, .disclaimer { break-inside: avoid; }
+        }
+      </style>
+    </head>
+    <body>
+      <main>
+        <header>
+          <div class="brand">スタッフ株式会社 / 未来へつなぐ共創パートナー</div>
+          <h1>${escapeHtml(REPORT_TITLE)}</h1>
+          <div class="meta">作成日時: ${escapeHtml(createdAt)}</div>
+        </header>
+        <div class="actions">
+          <button type="button" onclick="window.print()">PDFとして保存</button>
+          <span class="meta">ブラウザの印刷画面で「PDFに保存」を選択してください。</span>
+        </div>
+        <section class="summary">
+          <article><span>窓なし</span><strong>${escapeHtml(formatDbm(scenarioResults[0].rsrpDbm))}</strong></article>
+          <article><span>窓あり</span><strong>${escapeHtml(formatDbm(scenarioResults[1].rsrpDbm))}</strong></article>
+          <article><span>窓あり＋ナミゲート</span><strong>${escapeHtml(formatDbm(scenarioResults[2].rsrpDbm))}</strong></article>
+          <article><span>回復率</span><strong>${escapeHtml(`${numberFormatter.format(clamp(recoveryRate, 0, 100))}%`)}</strong></article>
+        </section>
+        <h2>入力条件</h2>
+        <table>
+          <tbody>
+            <tr><th>周波数</th><td>${escapeHtml(numberFormatter.format(settings.frequencyMHz))} MHz</td><th>屋外距離</th><td>${escapeHtml(formatMeters(settings.outdoorDistanceM))}</td></tr>
+            <tr><th>室内距離</th><td>${escapeHtml(formatMeters(settings.indoorDistanceM))}</td><th>屋外伝搬モデル</th><td>${escapeHtml(getOutdoorModelLabel(settings.outdoorModelId))}</td></tr>
+            <tr><th>窓種別</th><td>${escapeHtml(windowLabel)}</td><th>実効窓損失</th><td>${escapeHtml(formatDb(effectiveWindowLossDb))}</td></tr>
+            <tr><th>入射角</th><td>${escapeHtml(`${numberFormatter.format(settings.incidentAngleDeg)}° / 損失 ${formatDb(angleLossDb)}`)}</td><th>ナミゲート</th><td>${escapeHtml(`${namigateLabel} / 仮説 ${formatDb(totalNamigateGainDb)} / 適用 ${formatDb(appliedNamigateGainDb)}`)}</td></tr>
+            <tr><th>EIRP</th><td>${escapeHtml(formatDbm(effectiveEirpDbm))}</td><th>詳細EIRP</th><td>${escapeHtml(formatDbm(detailedEirpDbm))}</td></tr>
+            <tr><th>送信/受信高</th><td>${escapeHtml(`${formatMeters(settings.txAntennaHeightM)} / ${formatMeters(settings.rxAntennaHeightM)}`)}</td><th>窓中心高</th><td>${escapeHtml(formatMeters(settings.windowCenterHeightM))}</td></tr>
+            <tr><th>伝搬損失</th><td>${escapeHtml(`屋外 ${formatDb(currentOutdoorPathLossDb)} / 室内 ${formatDb(currentIndoorLossDb)}`)}</td><th>受信系補正</th><td>${escapeHtml(formatDb(receiverAdjustmentDb))}</td></tr>
+            <tr><th>接続しきい値</th><td>${escapeHtml(formatDbm(settings.connectionThresholdDbm))}</td><th>測定条件</th><td>${escapeHtml(`高さ ${formatMeters(protocol.measurementHeightM)} / N=${numberFormatter.format(protocol.observationCount)} / ${numberFormatter.format(protocol.averagingSeconds)}秒`)}</td></tr>
+          </tbody>
+        </table>
+        <h2>3状態比較</h2>
+        <table>
+          <thead><tr><th>状態</th><th>推定RSRP</th><th>接続可能面積</th><th>最大到達距離</th><th>接続可能性</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <h2>主要KPI</h2>
+        <table>
+          <tbody>
+            <tr><th>改善量</th><td>${escapeHtml(formatDb(scenarioResults[2].rsrpDbm - scenarioResults[1].rsrpDbm))}</td><th>窓損失の回復率</th><td>${escapeHtml(`${numberFormatter.format(clamp(recoveryRate, 0, 100))}%`)}</td></tr>
+            <tr><th>フェードマージン</th><td>${escapeHtml(formatDb(settings.fadeMarginDb))}</td><th>接続可能性</th><td>${escapeHtml(getConnectionLabel(scenarioResults[2].rsrpDbm, settings.connectionThresholdDbm))}</td></tr>
+          </tbody>
+        </table>
+        <h2>営業説明用コメント</h2>
+        <p class="comment">${escapeHtml(salesComment)}</p>
+        <h2>技術メモ</h2>
+        <table>
+          <thead><tr><th>項目</th><th>アプリモデル</th><th>実測</th><th>外部理論</th><th>読み方</th></tr></thead>
+          <tbody>${fieldRows}</tbody>
+        </table>
+        <p class="note">実測時はRSRP、SINR、RSRQ、DL/ULスループット、測定高さ、端末向き、窓・ナミゲート位置、N数、平均化時間を同じ条件で残すことを推奨します。</p>
+        <h2>実測前チェックリスト</h2>
+        <ul>${checklistRows}</ul>
+        <h2>免責・利用範囲</h2>
+        <p class="disclaimer">${escapeHtml(DISCLAIMER_FULL)}</p>
+      </main>
+    </body>
+  </html>`
+}
+
 function getModulePresetLabel(id: ModulePresetId) {
   return MODULE_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
 }
@@ -2535,6 +2804,13 @@ function isActiveView(value: unknown): value is ActiveView {
   return (
     typeof value === 'string' &&
     VIEW_TABS.some((tab) => tab.id === value)
+  )
+}
+
+function isAppMode(value: unknown): value is AppMode {
+  return (
+    typeof value === 'string' &&
+    DISPLAY_MODES.some((mode) => mode.id === value)
   )
 }
 
@@ -2863,8 +3139,8 @@ function buildExperimentReport({
     '## 備考',
     protocol.notes || '未入力',
     '',
-    '## 注意',
-    'これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである。',
+    '## 免責・利用範囲',
+    DISCLAIMER_FULL,
   ].join('\n')
 }
 
@@ -4278,6 +4554,9 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
 
 function App() {
   const autoSaveDraft = useMemo(() => loadAutoSaveDraft(), [])
+  const [appMode, setAppMode] = useState<AppMode>(() =>
+    isAppMode(autoSaveDraft.appMode) ? autoSaveDraft.appMode : 'sales',
+  )
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...(autoSaveDraft.settings ?? {}),
@@ -4382,6 +4661,7 @@ function App() {
       const persisted = persistAutoSaveDraft({
         version: 1,
         savedAt,
+        appMode,
         settings,
         measuredRsrpValues,
         theoryRsrpValues,
@@ -4402,6 +4682,7 @@ function App() {
 
     return () => window.clearTimeout(timeoutId)
   }, [
+    appMode,
     activeInputStep,
     activeView,
     caseName,
@@ -5049,6 +5330,64 @@ function App() {
     ],
   )
 
+  const salesComment = useMemo(
+    () =>
+      buildSalesComment({
+        noWindowRsrp,
+        withWindowRsrp,
+        withNamigateRsrp,
+        recoveryRate,
+        thresholdDbm: settings.connectionThresholdDbm,
+      }),
+    [
+      noWindowRsrp,
+      recoveryRate,
+      settings.connectionThresholdDbm,
+      withNamigateRsrp,
+      withWindowRsrp,
+    ],
+  )
+
+  const printReportHtml = useMemo(
+    () =>
+      buildPrintReportHtml({
+        settings,
+        protocol,
+        scenarioResults,
+        fieldEffectRows,
+        fieldAidItems,
+        effectiveWindowLossDb,
+        angleLossDb,
+        totalNamigateGainDb,
+        appliedNamigateGainDb,
+        recoveryRate,
+        effectiveEirpDbm,
+        detailedEirpDbm,
+        receiverAdjustmentDb,
+        currentOutdoorPathLossDb,
+        currentIndoorLossDb,
+        salesComment,
+      }),
+    [
+      angleLossDb,
+      appliedNamigateGainDb,
+      currentIndoorLossDb,
+      currentOutdoorPathLossDb,
+      detailedEirpDbm,
+      effectiveEirpDbm,
+      effectiveWindowLossDb,
+      fieldAidItems,
+      fieldEffectRows,
+      protocol,
+      receiverAdjustmentDb,
+      recoveryRate,
+      salesComment,
+      scenarioResults,
+      settings,
+      totalNamigateGainDb,
+    ],
+  )
+
   const handleWindowPresetChange = (presetId: WindowPresetId) => {
     const preset = WINDOW_PRESETS.find((item) => item.id === presetId)
     setSettings((current) => ({
@@ -5122,6 +5461,21 @@ function App() {
     } catch {
       setCopyStatus('レポートをコピーできませんでした')
     }
+  }
+
+  const handlePrintPdfReport = () => {
+    const reportWindow = window.open('', '_blank')
+
+    if (!reportWindow) {
+      setCopyStatus('レポート画面を開けませんでした。ポップアップ許可を確認してください')
+      return
+    }
+
+    reportWindow.document.open()
+    reportWindow.document.write(printReportHtml)
+    reportWindow.document.close()
+    reportWindow.focus()
+    setCopyStatus('PDFレポート画面を開きました')
   }
 
   const buildCurrentSavedCase = (id: string, name: string): SavedTestCase => ({
@@ -5328,27 +5682,58 @@ function App() {
   )
 
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell ${
+        appMode === 'sales' ? 'is-sales-mode' : 'is-technical-mode'
+      }`}
+    >
       <header className="app-header">
         <div>
           <p className="eyebrow">Local 5G Window Link MVP</p>
           <h1>ローカル5G 窓面電波改善シミュレータ</h1>
         </div>
-        <div className="header-summary">
-          <span>基準しきい値</span>
-          <strong>{formatDbm(settings.connectionThresholdDbm)}</strong>
+        <div className="header-actions">
+          <div className="mode-switch" role="group" aria-label="表示モード切り替え">
+            {DISPLAY_MODES.map((mode) => (
+              <button
+                aria-pressed={appMode === mode.id}
+                className={appMode === mode.id ? 'is-active' : ''}
+                key={mode.id}
+                type="button"
+                onClick={() => setAppMode(mode.id)}
+              >
+                <strong>{mode.label}</strong>
+                <span>{mode.description}</span>
+              </button>
+            ))}
+          </div>
+          <div className="header-summary">
+            <span>基準しきい値</span>
+            <strong>{formatDbm(settings.connectionThresholdDbm)}</strong>
+          </div>
         </div>
       </header>
+
+      <section className="top-disclaimer" aria-label="免責・利用範囲">
+        <strong>
+          {appMode === 'sales' ? '実測前の仮説整理ツール' : '免責・利用範囲'}
+        </strong>
+        <p>{appMode === 'sales' ? DISCLAIMER_SHORT : DISCLAIMER_FULL}</p>
+      </section>
 
       <section className="layout-grid">
         <aside className="control-panel">
           <div className="panel-heading">
             <div>
-              <p className="panel-kicker">迷わない入力順</p>
+              <p className="panel-kicker">
+                {appMode === 'sales' ? '商談用クイック入力' : '迷わない入力順'}
+              </p>
               <h2>入力条件</h2>
             </div>
             <span className="step-count">
-              {activeInputStepIndex + 1}/{INPUT_STEPS.length}
+              {appMode === 'sales'
+                ? '簡易'
+                : `${activeInputStepIndex + 1}/${INPUT_STEPS.length}`}
             </span>
           </div>
 
@@ -5377,6 +5762,131 @@ function App() {
           <section className="autosave-strip" aria-label="入力内容の自動保存">
             <strong>{autoSaveStatus}</strong>
             <span>このブラウザに作業中の入力内容を自動保存します</span>
+          </section>
+
+          <section className="sales-control-panel" aria-label="営業用簡易入力">
+            <div className="sales-mode-note">
+              <strong>まずは8項目だけで概算</strong>
+              <span>
+                詳細条件は現在値を使います。必要になったら技術詳細モードでEIRP、アンテナ利得、実測比較まで確認できます。
+              </span>
+            </div>
+            <div className="sales-control-grid">
+              <NumberInput
+                label="周波数"
+                value={settings.frequencyMHz}
+                min={1}
+                step={10}
+                unit="MHz"
+                onChange={(value) => updateSetting('frequencyMHz', value)}
+              />
+              <NumberInput
+                label="屋外距離"
+                value={settings.outdoorDistanceM}
+                min={1}
+                step={1}
+                unit="m"
+                help="屋外基地局・送信アンテナから窓面までの水平距離です。展示会デモでは100m、実地検討では図面または地図で確認した距離を入れます。"
+                onChange={(value) => updateSetting('outdoorDistanceM', value)}
+              />
+              <label className="control">
+                <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
+                <select
+                  value={settings.windowPresetId}
+                  onChange={(event) =>
+                    handleWindowPresetChange(event.target.value as WindowPresetId)
+                  }
+                >
+                  {WINDOW_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <NumberInput
+                label="窓損失"
+                value={settings.windowLossDb}
+                min={0}
+                step={1}
+                unit="dB"
+                onChange={(value) => {
+                  updateSetting('windowPresetId', 'custom')
+                  updateSetting('windowLossDb', value)
+                }}
+              />
+              <NumberInput
+                label="入射角"
+                value={settings.incidentAngleDeg}
+                min={15}
+                max={90}
+                step={1}
+                unit="°"
+                onChange={(value) => updateSetting('incidentAngleDeg', value)}
+              />
+              <NumberInput
+                label="室内距離"
+                value={settings.indoorDistanceM}
+                min={1}
+                step={0.5}
+                unit="m"
+                onChange={(value) => updateSetting('indoorDistanceM', value)}
+              />
+              <label className="checklist-item sales-toggle">
+                <input
+                  checked={settings.namigateGainDb > 0}
+                  type="checkbox"
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      setSettings((current) => ({
+                        ...current,
+                        namigatePresetId: 'standard',
+                        namigateGainDb:
+                          current.namigateGainDb > 0 ? current.namigateGainDb : 10,
+                      }))
+                    } else {
+                      setSettings((current) => ({
+                        ...current,
+                        namigatePresetId: 'custom',
+                        namigateGainDb: 0,
+                      }))
+                    }
+                  }}
+                />
+                <span>
+                  ナミゲート有無
+                  <HelpTip text="オフにするとナミゲート改善量を0dBとして、窓あり状態との差が見やすくなります。" />
+                </span>
+              </label>
+              <NumberInput
+                label="ナミゲート改善量"
+                value={settings.namigateGainDb}
+                min={0}
+                step={1}
+                unit="dB"
+                onChange={(value) => {
+                  updateSetting('namigatePresetId', 'custom')
+                  updateSetting('namigateGainDb', value)
+                }}
+              />
+              <NumberInput
+                label="測定高さ"
+                value={protocol.measurementHeightM}
+                min={0.2}
+                step={0.1}
+                unit="m"
+                onChange={(value) => {
+                  updateProtocol('measurementHeightM', value)
+                  updateSetting('rxAntennaHeightM', value)
+                }}
+              />
+            </div>
+            <div className="sales-mode-note is-light">
+              <strong>営業説明の読み方</strong>
+              <span>
+                窓なし、窓あり、窓あり＋ナミゲートの差を見て、窓で落ちた分をどれだけ戻せるかを説明します。
+              </span>
+            </div>
           </section>
 
           {renderPatternManager('compact')}
@@ -6062,6 +6572,68 @@ function App() {
                 </small>
               </article>
             ))}
+          </section>
+
+          <section className="sales-results-section" aria-label="営業用結果サマリー">
+            <div className="sales-result-header">
+              <div>
+                <p className="panel-kicker">商談用サマリー</p>
+                <h2>ナミゲートによる回復効果</h2>
+              </div>
+              <button type="button" onClick={handlePrintPdfReport}>
+                PDFレポート出力
+              </button>
+            </div>
+            <div className="sales-kpi-grid">
+              <article>
+                <span>改善量</span>
+                <strong>{formatDb(estimatedNamigateGainDb)}</strong>
+                <small>窓あり比</small>
+              </article>
+              <article>
+                <span>窓損失の回復率</span>
+                <strong>{numberFormatter.format(clamp(recoveryRate, 0, 100))}%</strong>
+                <small>{formatDb(recoveredGapDb)} 回復</small>
+              </article>
+              <article>
+                <span>接続可能性</span>
+                <strong>
+                  {getConnectionLabel(
+                    scenarioResults[2].rsrpDbm,
+                    settings.connectionThresholdDbm,
+                  )}
+                </strong>
+                <small>しきい値 {formatDbm(settings.connectionThresholdDbm)}</small>
+              </article>
+              <article>
+                <span>接続可能面積</span>
+                <strong>{formatArea(scenarioResults[2].connectedAreaM2)}</strong>
+                <small>部屋面積 {formatArea(roomAreaM2)}</small>
+              </article>
+            </div>
+            <div className="sales-comment-card">
+              <span>営業説明用コメント</span>
+              <p>{salesComment}</p>
+            </div>
+            <div className="sales-detail-list" aria-label="簡易モードの主要条件">
+              <span>窓損失 {formatDb(effectiveWindowLossDb)}</span>
+              <span>入射角損失 {formatDb(angleLossDb)}</span>
+              <span>ナミゲート適用改善 {formatDb(appliedNamigateGainDb)}</span>
+              <span>最大到達距離 {formatMeters(scenarioResults[2].maxReachM)}</span>
+            </div>
+            <p className="result-disclaimer">{DISCLAIMER_SHORT}</p>
+            {copyStatus ? <span className="report-status">{copyStatus}</span> : null}
+          </section>
+
+          <section className="technical-report-toolbar" aria-label="レポート出力">
+            <div>
+              <strong>PDFレポート</strong>
+              <span>入力条件、3状態比較、主要KPI、免責文を印刷用レポートにまとめます。</span>
+              <p>{DISCLAIMER_FULL}</p>
+            </div>
+            <button type="button" onClick={handlePrintPdfReport}>
+              PDFレポート出力
+            </button>
           </section>
 
           <nav className="view-tabs" role="tablist" aria-label="表示切り替え">
@@ -7093,7 +7665,7 @@ function App() {
       </section>
 
       <footer className="app-footer">
-        これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである。RSRPはリンクバジェット近似として扱う。
+        {DISCLAIMER_FULL} RSRPはリンクバジェット近似として扱う。
       </footer>
     </main>
   )

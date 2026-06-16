@@ -31,6 +31,8 @@ type Settings = {
   outdoorDistanceM: number
   windowPresetId: WindowPresetId
   windowLossDb: number
+  windowWidthM: number
+  windowHeightM: number
   incidentAngleDeg: number
   roomWidthM: number
   roomDepthM: number
@@ -63,10 +65,33 @@ type ScenarioResult = {
   maxReachM: number
 }
 
+type ScenarioDefinition = {
+  key: ScenarioKey
+  label: string
+  color: string
+}
+
 type PositionDiagramProps = {
   settings: Settings
   angleLossDb: number
   areaGainDb: number
+}
+
+type HeatmapCell = {
+  id: string
+  rsrpDbm: number
+  isConnected: boolean
+}
+
+type HeatmapData = {
+  cells: HeatmapCell[]
+  connectedAreaM2: number
+}
+
+type HeatmapPlanProps = {
+  settings: Settings
+  scenario: ScenarioDefinition
+  heatmap: HeatmapData
 }
 
 const MAIN_COLOR = '#0071BD'
@@ -96,7 +121,7 @@ const NAMIGATE_PRESETS: {
   { id: 'custom', label: '任意', gainDb: null },
 ]
 
-const SCENARIOS: { key: ScenarioKey; label: string; color: string }[] = [
+const SCENARIOS: ScenarioDefinition[] = [
   { key: 'noWindow', label: '窓なし', color: '#15845d' },
   { key: 'withWindow', label: '窓あり', color: '#c96c34' },
   { key: 'withNamigate', label: '窓あり＋ナミゲート', color: MAIN_COLOR },
@@ -121,6 +146,8 @@ const DEFAULT_SETTINGS: Settings = {
   outdoorDistanceM: 100,
   windowPresetId: 'lowE',
   windowLossDb: 40,
+  windowWidthM: 2.4,
+  windowHeightM: 1.8,
   incidentAngleDeg: 60,
   roomWidthM: 8,
   roomDepthM: 12,
@@ -260,7 +287,7 @@ function getIndoorPointDistanceM(
   return Math.max(Math.hypot(x - windowCenterX, y), 1)
 }
 
-function buildHeatmap(settings: Settings, scenario: ScenarioKey) {
+function buildHeatmap(settings: Settings, scenario: ScenarioKey): HeatmapData {
   const roomWidthM = Math.max(settings.roomWidthM, 1)
   const roomDepthM = Math.max(settings.roomDepthM, 1)
   const cellAreaM2 = (roomWidthM * roomDepthM) / (HEATMAP_COLUMNS * HEATMAP_ROWS)
@@ -366,6 +393,151 @@ function NumberInput({
   )
 }
 
+function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
+  const roomWidthM = Math.max(settings.roomWidthM, 1)
+  const roomDepthM = Math.max(settings.roomDepthM, 1)
+  const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+  const transmitterXPct = clamp(
+    50 - Math.tan(((90 - safeAngle) * Math.PI) / 180) * 22,
+    10,
+    90,
+  )
+  const receiverYPct = clamp((settings.indoorDistanceM / roomDepthM) * 100, 9, 92)
+  const windowWidthPct =
+    scenario.key === 'noWindow'
+      ? clamp((settings.windowWidthM / roomWidthM) * 100, 16, 88)
+      : clamp((settings.windowWidthM / roomWidthM) * 100, 18, 88)
+  const windowLeftPct = 50 - windowWidthPct / 2
+  const namigateWidthM = Math.max(settings.namigateWidthCm / 100, 0.01)
+  const namigateWidthPct = clamp(
+    (namigateWidthM / roomWidthM) * 100,
+    5,
+    Math.max(windowWidthPct, 5),
+  )
+  const namigateLeftPct = 50 - namigateWidthPct / 2
+  const hasNamigate = scenario.key === 'withNamigate'
+
+  return (
+    <div className="heatmap-plan">
+      <div className="heatmap-outdoor" aria-hidden="true">
+        <span
+          className="heatmap-device heatmap-transmitter"
+          style={{ left: `${transmitterXPct}%` }}
+        >
+          送信機
+        </span>
+        <svg className="heatmap-outdoor-ray" viewBox="0 0 100 56">
+          <line
+            x1={transmitterXPct}
+            y1="18"
+            x2="50"
+            y2="56"
+            stroke={scenario.color}
+            strokeLinecap="round"
+            strokeWidth="2.8"
+          />
+        </svg>
+        <span className="heatmap-outdoor-distance">
+          屋外 {formatMeters(settings.outdoorDistanceM)}
+        </span>
+      </div>
+
+      <div
+        className="heatmap-room"
+        aria-label={`${scenario.label}の室内ヒートマップ上面図`}
+      >
+        <div
+          className="heatmap"
+          style={{
+            gridTemplateColumns: `repeat(${HEATMAP_COLUMNS}, minmax(0, 1fr))`,
+          }}
+        >
+          {heatmap.cells.map((cell) => (
+            <span
+              className={cell.isConnected ? 'heat-cell' : 'heat-cell is-low'}
+              key={cell.id}
+              title={`${formatDbm(cell.rsrpDbm)} / ${
+                cell.isConnected ? '接続可能' : 'しきい値未満'
+              }`}
+              style={{
+                backgroundColor: getHeatColor(
+                  cell.rsrpDbm,
+                  settings.connectionThresholdDbm,
+                ),
+              }}
+            />
+          ))}
+        </div>
+
+        <svg className="heatmap-overlay" viewBox="0 0 100 100" aria-hidden="true">
+          <line className="heatmap-wall-line" x1="0" y1="0" x2="100" y2="0" />
+          <rect
+            className={
+              scenario.key === 'noWindow'
+                ? 'heatmap-window is-reference'
+                : 'heatmap-window'
+            }
+            x={windowLeftPct}
+            y="-1.8"
+            width={windowWidthPct}
+            height="4.8"
+            rx="1.4"
+          />
+          {hasNamigate ? (
+            <rect
+              className="heatmap-namigate"
+              x={namigateLeftPct}
+              y="-3.2"
+              width={namigateWidthPct}
+              height="7.6"
+              rx="1.6"
+            />
+          ) : null}
+          <path
+            className="heatmap-indoor-ray"
+            d={`M 50 0 L 50 ${receiverYPct}`}
+            stroke={scenario.color}
+          />
+          <circle
+            className="heatmap-receiver-dot"
+            cx="50"
+            cy={receiverYPct}
+            r="4"
+          />
+          <circle
+            className="heatmap-receiver-core"
+            cx="50"
+            cy={receiverYPct}
+            r="1.6"
+          />
+          <text className="heatmap-overlay-label" x="51.8" y={receiverYPct - 3}>
+            受信機
+          </text>
+          <text className="heatmap-overlay-label" x={windowLeftPct} y="8.5">
+            窓 {numberFormatter.format(settings.windowWidthM)}m
+          </text>
+          {hasNamigate ? (
+            <text className="heatmap-overlay-accent" x={namigateLeftPct} y="15">
+              ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm
+            </text>
+          ) : null}
+        </svg>
+      </div>
+
+      <div className="heatmap-plan-legend">
+        <span>窓幅 {numberFormatter.format(settings.windowWidthM)}m</span>
+        <span>窓高 {numberFormatter.format(settings.windowHeightM)}m</span>
+        <span>室内 {formatMeters(settings.indoorDistanceM)}</span>
+        {hasNamigate ? (
+          <span>ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm幅</span>
+        ) : (
+          <span>ナミゲートなし</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramProps) {
   const roomX = 300
   const roomY = 48
@@ -391,10 +563,12 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
   const windowLabel =
     WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId)?.label ??
     '任意'
+  const windowPatchHeight = clamp(settings.windowHeightM * 44, 46, 132)
   const namigatePatchHeight = clamp(
-    Math.sqrt(settings.namigateWidthCm * settings.namigateHeightCm) * 0.85,
+    (settings.namigateHeightCm / 100 / Math.max(settings.windowHeightM, 0.2)) *
+      windowPatchHeight,
     22,
-    78,
+    windowPatchHeight,
   )
 
   return (
@@ -441,9 +615,9 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
         <rect
           className="diagram-window"
           x={windowX - 8}
-          y={windowCenterY - 48}
+          y={windowCenterY - windowPatchHeight / 2}
           width="16"
-          height="96"
+          height={windowPatchHeight}
           rx="4"
         />
         <rect
@@ -531,7 +705,9 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           <span>窓種別</span>
           <strong>{windowLabel}</strong>
           <small>
-            損失 {formatDb(settings.windowLossDb)} / 入射角損失 {formatDb(angleLossDb)}
+            {numberFormatter.format(settings.windowWidthM)}×
+            {numberFormatter.format(settings.windowHeightM)}m / 損失{' '}
+            {formatDb(settings.windowLossDb)} / 入射角損失 {formatDb(angleLossDb)}
           </small>
         </div>
         <div>
@@ -781,6 +957,22 @@ function App() {
               }}
             />
             <NumberInput
+              label="窓幅"
+              value={settings.windowWidthM}
+              min={0.2}
+              step={0.1}
+              unit="m"
+              onChange={(value) => updateSetting('windowWidthM', value)}
+            />
+            <NumberInput
+              label="窓高さ"
+              value={settings.windowHeightM}
+              min={0.2}
+              step={0.1}
+              unit="m"
+              onChange={(value) => updateSetting('windowHeightM', value)}
+            />
+            <NumberInput
               label="入射角"
               value={settings.incidentAngleDeg}
               min={15}
@@ -971,28 +1163,11 @@ function App() {
                     <strong>{scenario.label}</strong>
                     <span>{formatArea(heatmaps[scenario.key].connectedAreaM2)}</span>
                   </div>
-                  <div
-                    className="heatmap"
-                    style={{
-                      gridTemplateColumns: `repeat(${HEATMAP_COLUMNS}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {heatmaps[scenario.key].cells.map((cell) => (
-                      <span
-                        className={cell.isConnected ? 'heat-cell' : 'heat-cell is-low'}
-                        key={cell.id}
-                        title={`${formatDbm(cell.rsrpDbm)} / ${
-                          cell.isConnected ? '接続可能' : 'しきい値未満'
-                        }`}
-                        style={{
-                          backgroundColor: getHeatColor(
-                            cell.rsrpDbm,
-                            settings.connectionThresholdDbm,
-                          ),
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <HeatmapPlan
+                    settings={settings}
+                    scenario={scenario}
+                    heatmap={heatmaps[scenario.key]}
+                  />
                 </article>
               ))}
             </div>

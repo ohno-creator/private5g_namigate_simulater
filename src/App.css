@@ -68,6 +68,7 @@
 .control-panel,
 .results-panel,
 .position-section,
+.measurement-section,
 .coverage-section,
 .heatmap-section,
 .chart-card {
@@ -182,6 +183,29 @@
   outline: 3px solid rgba(0, 113, 189, 0.16);
 }
 
+.model-note {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid #c9d8e4;
+  border-left: 4px solid #0071bd;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.model-note strong {
+  color: #384757;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.model-note span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
 .results-panel {
   display: grid;
   gap: 18px;
@@ -262,6 +286,222 @@
   overflow: hidden;
 }
 
+.measurement-section {
+  overflow: hidden;
+}
+
+.measurement-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.measurement-input-grid,
+.measurement-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.measurement-input {
+  padding: 13px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.measurement-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #d8e2ea;
+}
+
+.measurement-row {
+  display: grid;
+  grid-template-columns: 1.05fr repeat(3, minmax(96px, 1fr)) 1.05fr;
+  gap: 1px;
+  background: #d8e2ea;
+}
+
+.measurement-row > span,
+.measurement-row > strong {
+  display: grid;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 10px;
+  background: #ffffff;
+  color: #172330;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.measurement-row.is-head > span {
+  min-height: 34px;
+  background: #f1f6fa;
+  color: #526271;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.measurement-row > strong {
+  font-weight: 800;
+}
+
+.measurement-row .is-positive {
+  color: #15845d;
+}
+
+.measurement-row .is-negative {
+  color: #ba3b35;
+}
+
+.measurement-row .is-muted {
+  color: #697888;
+}
+
+.measurement-row > span::before,
+.measurement-row > strong::before {
+  display: none;
+}
+
+.measurement-summary article {
+  display: grid;
+  gap: 7px;
+  min-height: 88px;
+  padding: 13px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.measurement-summary span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.measurement-summary strong {
+  color: #101820;
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.measurement-summary small {
+  color: #697888;
+  font-size: 12px;
+}
+
+.analysis-copy-panel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.analysis-copy-panel button {
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid #0067ad;
+  border-radius: 6px;
+  background: #0071bd;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.analysis-copy-panel button:hover {
+  background: #005f9f;
+}
+
+.analysis-copy-panel button:focus {
+  outline: 3px solid rgba(0, 113, 189, 0.2);
+  outline-offset: 2px;
+}
+
+.analysis-copy-panel span {
+  color: #526271;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.position-3d-layout {
+  display: grid;
+  gap: 14px;
+  padding: 16px 16px 0;
+}
+
+.position-3d-scene {
+  position: relative;
+  min-height: 420px;
+  height: clamp(420px, 42vw, 590px);
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.position-3d-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.position-3d-help {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 113, 189, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #526271;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.position-3d-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.position-3d-facts div {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 78px;
+  padding: 13px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.position-3d-facts span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.position-3d-facts strong {
+  color: #101820;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.position-3d-facts small {
+  color: #697888;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .position-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
@@ -317,7 +557,8 @@
 }
 
 .diagram-normal,
-.diagram-distance {
+.diagram-distance,
+.diagram-dimension {
   stroke: #6f7f8d;
   stroke-dasharray: 5 5;
   stroke-linecap: round;
@@ -357,9 +598,14 @@
 .diagram-zone-label,
 .diagram-label,
 .diagram-accent-label,
-.diagram-muted-label {
+.diagram-muted-label,
+.diagram-dimension-label {
   font-weight: 700;
   letter-spacing: 0;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 3px;
 }
 
 .diagram-zone-label {
@@ -380,6 +626,11 @@
 .diagram-muted-label {
   fill: #5e6f7d;
   font-size: 12px;
+}
+
+.diagram-dimension-label {
+  fill: #526271;
+  font-size: 11px;
 }
 
 .position-facts {
@@ -488,6 +739,18 @@
   pointer-events: none;
 }
 
+.heatmap-outdoor-label {
+  fill: #384757;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 2px;
+  text-anchor: middle;
+}
+
 .heatmap-device {
   position: absolute;
   z-index: 2;
@@ -586,6 +849,13 @@
   stroke-dasharray: 3 2;
 }
 
+.heatmap-dimension-line {
+  stroke: #526271;
+  stroke-dasharray: 2 2;
+  stroke-linecap: round;
+  stroke-width: 1;
+}
+
 .heatmap-receiver-dot {
   fill: #ffffff;
   stroke: #0071bd;
@@ -597,7 +867,8 @@
 }
 
 .heatmap-overlay-label,
-.heatmap-overlay-accent {
+.heatmap-overlay-accent,
+.heatmap-dimension-label {
   font-size: 4px;
   font-weight: 800;
   letter-spacing: 0;
@@ -613,6 +884,10 @@
 
 .heatmap-overlay-accent {
   fill: #0071bd;
+}
+
+.heatmap-dimension-label {
+  fill: #526271;
 }
 
 .heatmap-plan-legend {
@@ -690,10 +965,16 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .measurement-input-grid,
+  .measurement-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .position-layout {
     grid-template-columns: 1fr;
   }
 
+  .position-3d-facts,
   .position-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -716,11 +997,23 @@
 
   .control-panel,
   .rsrp-grid,
+  .measurement-input-grid,
+  .measurement-summary,
+  .position-3d-facts,
   .position-facts,
   .coverage-grid,
   .heatmap-grid,
   .chart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .position-3d-layout {
+    padding: 14px 14px 0;
+  }
+
+  .position-3d-scene {
+    min-height: 360px;
+    height: 62vw;
   }
 
   .position-layout {
@@ -742,6 +1035,57 @@
 
   .section-heading span {
     white-space: normal;
+  }
+
+  .measurement-table {
+    gap: 10px;
+    border: 0;
+    background: transparent;
+  }
+
+  .measurement-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid #d8e2ea;
+    border-radius: 8px;
+    background: #d8e2ea;
+  }
+
+  .measurement-row.is-head {
+    display: none;
+  }
+
+  .measurement-row > span,
+  .measurement-row > strong {
+    align-content: center;
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .measurement-row > span:first-child {
+    grid-column: 1 / -1;
+    min-height: 38px;
+    background: #f1f6fa;
+    font-weight: 800;
+  }
+
+  .measurement-row > span::before,
+  .measurement-row > strong::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: #697888;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .measurement-row > span:first-child::before {
+    display: none;
+  }
+
+  .analysis-copy-panel {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

@@ -139,10 +139,26 @@ type HeatmapData = {
 }
 
 type MeasuredRsrpValues = Record<ScenarioKey, string>
+type TheoryRsrpValues = Record<ScenarioKey, string>
 
 type MeasuredComparison = ScenarioResult & {
   measuredRsrpDbm: number | null
   residualDb: number | null
+}
+
+type TheoryComparison = MeasuredComparison & {
+  theoryRsrpDbm: number | null
+  measuredVsTheoryDb: number | null
+  estimatedVsTheoryDb: number | null
+}
+
+type EffectSummaryRow = {
+  label: string
+  model: string
+  measured: string
+  theory: string
+  delta: string
+  memo: string
 }
 
 type HeatmapPlanProps = {
@@ -233,6 +249,7 @@ type SavedTestCase = {
   savedAt: string
   settings: Settings
   measuredRsrpValues: MeasuredRsrpValues
+  theoryRsrpValues?: TheoryRsrpValues
   measurementPoints: MeasurementPoint[]
   protocol: TestProtocol
 }
@@ -958,6 +975,12 @@ const DEFAULT_MEASURED_RSRP: MeasuredRsrpValues = {
   withNamigate: '',
 }
 
+const DEFAULT_THEORY_RSRP: TheoryRsrpValues = {
+  noWindow: '',
+  withWindow: '',
+  withNamigate: '',
+}
+
 const DEFAULT_PROTOCOL: TestProtocol = {
   siteName: '',
   operatorName: '',
@@ -1662,6 +1685,24 @@ function averageNullable(values: Array<number | null>) {
   return numbers.reduce((sum, value) => sum + value, 0) / numbers.length
 }
 
+function subtractNullable(
+  minuend: number | null,
+  subtrahend: number | null,
+): number | null {
+  return minuend === null || subtrahend === null ? null : minuend - subtrahend
+}
+
+function recoveryPercentNullable(
+  recoveredDb: number | null,
+  gapDb: number | null,
+): number | null {
+  if (recoveredDb === null || gapDb === null || Math.abs(gapDb) < 0.001) {
+    return null
+  }
+
+  return (recoveredDb / gapDb) * 100
+}
+
 function calculateQualityStats(
   points: MeasurementPoint[],
   thresholdDbm: number,
@@ -2038,6 +2079,8 @@ function buildExperimentReport({
   settings,
   protocol,
   scenarioResults,
+  theoryComparisons,
+  fieldEffectRows,
   pointComparisons,
   errorStats,
   qualityStats,
@@ -2048,6 +2091,8 @@ function buildExperimentReport({
   settings: Settings
   protocol: TestProtocol
   scenarioResults: ScenarioResult[]
+  theoryComparisons: TheoryComparison[]
+  fieldEffectRows: EffectSummaryRow[]
   pointComparisons: PointComparison[]
   errorStats: ErrorStats
   qualityStats: QualityStats
@@ -2096,6 +2141,22 @@ function buildExperimentReport({
         )} | ${formatMeters(row.maxReachM)} |`,
     )
     .join('\n')
+  const theoryRowsText = theoryComparisons
+    .map(
+      (row) =>
+        `| ${row.label} | ${formatDbm(row.rsrpDbm)} | ${formatOptionalDbm(
+          row.measuredRsrpDbm,
+        )} | ${formatOptionalDbm(row.theoryRsrpDbm)} | ${formatOptionalDb(
+          row.measuredVsTheoryDb,
+        )} | ${formatOptionalDb(row.estimatedVsTheoryDb)} |`,
+    )
+    .join('\n')
+  const effectRowsText = fieldEffectRows
+    .map(
+      (row) =>
+        `| ${row.label} | ${row.model} | ${row.measured} | ${row.theory} | ${row.delta} | ${row.memo} |`,
+    )
+    .join('\n')
 
   return [
     '# ローカル5G 窓面電波改善 実証試験レポート',
@@ -2142,6 +2203,16 @@ function buildExperimentReport({
           scenario.connectedAreaM2,
         )} | ${formatMeters(scenario.maxReachM)} |`,
     ),
+    '',
+    '## 実測と外部理論計算値の比較',
+    '| 状態 | アプリ推定RSRP | 実測RSRP | 外部理論RSRP | 実測-理論 | 推定-理論 |',
+    '| --- | ---: | ---: | ---: | ---: | ---: |',
+    theoryRowsText,
+    '',
+    '## dB寄与分解',
+    '| 項目 | アプリモデル | 実測 | 外部理論 | 実測-理論 | 読み方 |',
+    '| --- | ---: | ---: | ---: | ---: | --- |',
+    effectRowsText,
     '',
     '## 実測点誤差',
     `- 実測点数: ${numberFormatter.format(errorStats.count)}`,
@@ -2196,11 +2267,14 @@ function buildAiAnalysisText({
   protocol,
   scenarioResults,
   measuredComparisons,
+  theoryComparisons,
+  fieldEffectRows,
   angleLossDb,
   areaGainDb,
   totalNamigateGainDb,
   recoveryRate,
   measuredAverageResidualDb,
+  measuredVsTheoryAverageGapDb,
   measuredWindowLossDb,
   measuredNamigateGainDb,
 }: {
@@ -2208,11 +2282,14 @@ function buildAiAnalysisText({
   protocol: TestProtocol
   scenarioResults: ScenarioResult[]
   measuredComparisons: MeasuredComparison[]
+  theoryComparisons: TheoryComparison[]
+  fieldEffectRows: EffectSummaryRow[]
   angleLossDb: number
   areaGainDb: number
   totalNamigateGainDb: number
   recoveryRate: number
   measuredAverageResidualDb: number | null
+  measuredVsTheoryAverageGapDb: number | null
   measuredWindowLossDb: number | null
   measuredNamigateGainDb: number | null
 }) {
@@ -2238,6 +2315,22 @@ function buildAiAnalysisText({
         )} | ${formatOptionalDb(comparison.residualDb)} | ${describeResidual(
           comparison.residualDb,
         )} |`,
+    )
+    .join('\n')
+  const theoryRows = theoryComparisons
+    .map(
+      (comparison) =>
+        `| ${comparison.label} | ${formatDbm(comparison.rsrpDbm)} | ${formatOptionalDbm(
+          comparison.measuredRsrpDbm,
+        )} | ${formatOptionalDbm(comparison.theoryRsrpDbm)} | ${formatOptionalDb(
+          comparison.measuredVsTheoryDb,
+        )} | ${formatOptionalDb(comparison.estimatedVsTheoryDb)} |`,
+    )
+    .join('\n')
+  const effectRows = fieldEffectRows
+    .map(
+      (row) =>
+        `| ${row.label} | ${row.model} | ${row.measured} | ${row.theory} | ${row.delta} | ${row.memo} |`,
     )
     .join('\n')
 
@@ -2320,6 +2413,16 @@ function buildAiAnalysisText({
     '| --- | ---: | ---: | ---: | --- |',
     rows,
     '',
+    '## 外部理論計算値との比較',
+    '| 状態 | アプリ推定RSRP | 実測RSRP | 外部理論RSRP | 実測-理論 | 推定-理論 |',
+    '| --- | ---: | ---: | ---: | ---: | ---: |',
+    theoryRows,
+    '',
+    '## dB寄与分解',
+    '| 項目 | アプリモデル | 実測 | 外部理論 | 実測-理論 | 読み方 |',
+    '| --- | ---: | ---: | ---: | ---: | --- |',
+    effectRows,
+    '',
     '## 改善効果',
     `- 推定の窓なし-窓あり差: ${formatDb(estimatedWindowLossDb)}`,
     `- 実測の窓なし-窓あり差: ${formatOptionalDb(measuredWindowLossDb)}`,
@@ -2327,11 +2430,14 @@ function buildAiAnalysisText({
     `- 実測のナミゲート改善量: ${formatOptionalDb(measuredNamigateGainDb)}`,
     `- 窓なし状態への推定回復率: ${numberFormatter.format(clamp(recoveryRate, 0, 100))}%`,
     `- 平均誤差 実測-推定: ${formatOptionalDb(measuredAverageResidualDb)}`,
+    `- 平均差 実測-外部理論: ${formatOptionalDb(measuredVsTheoryAverageGapDb)}`,
     '',
     '## 解析観点',
     '- 3状態に共通するオフセットがあるか',
     '- 窓ありだけ誤差が大きい場合、窓損失または入射角損失をどう補正すべきか',
     '- ナミゲートありだけ誤差が大きい場合、改善量または面積補正をどう見直すべきか',
+    '- 外部理論計算値との差が全状態で同方向か、窓閉鎖またはナミゲート時だけ大きいか',
+    '- 角度別に再測定した場合、入射角損失とガラス由来損失を分離できるか',
     '- 観測N数と平均化時間が、フェージングや人流によるばらつきを十分ならしているか',
   ].join('\n')
 }
@@ -2488,8 +2594,7 @@ function PositionScene3D({
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 0.22
+    controls.autoRotate = false
     controls.target.set(0, wallHeightM * 0.48, roomDepthM * 0.48)
     controls.minDistance = Math.max(4, Math.min(roomWidthM, roomDepthM) * 0.6)
     controls.maxDistance = Math.max(18, roomDepthM * 3)
@@ -2711,23 +2816,67 @@ function PositionScene3D({
       0x0071bd,
     )
 
+    const addLeaderLine = (
+      start: THREE.Vector3,
+      end: THREE.Vector3,
+      color = 0x6f7f8d,
+    ) => {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([start, end]),
+        new THREE.LineBasicMaterial({
+          color,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.74,
+        }),
+      )
+      line.renderOrder = 12
+      scene.add(line)
+    }
+
+    const drawRoundedRect = (
+      context: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      radius: number,
+    ) => {
+      context.beginPath()
+      context.moveTo(x + radius, y)
+      context.lineTo(x + width - radius, y)
+      context.quadraticCurveTo(x + width, y, x + width, y + radius)
+      context.lineTo(x + width, y + height - radius)
+      context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+      context.lineTo(x + radius, y + height)
+      context.quadraticCurveTo(x, y + height, x, y + height - radius)
+      context.lineTo(x, y + radius)
+      context.quadraticCurveTo(x, y, x + radius, y)
+      context.closePath()
+    }
+
     const makeLabel = (text: string, color = '#172330') => {
       const canvas = document.createElement('canvas')
-      canvas.width = 512
-      canvas.height = 128
+      canvas.width = 768
+      canvas.height = 192
       const context = canvas.getContext('2d')
 
       if (context) {
-        context.fillStyle = 'rgba(255,255,255,0.88)'
-        context.fillRect(0, 20, 512, 88)
-        context.strokeStyle = 'rgba(0,113,189,0.28)'
-        context.lineWidth = 4
-        context.strokeRect(2, 22, 508, 84)
+        context.shadowColor = 'rgba(16,24,32,0.18)'
+        context.shadowBlur = 18
+        context.shadowOffsetY = 6
+        drawRoundedRect(context, 16, 34, 736, 124, 22)
+        context.fillStyle = 'rgba(255,255,255,0.96)'
+        context.fill()
+        context.shadowColor = 'transparent'
+        context.strokeStyle = color === '#172330' ? 'rgba(0,113,189,0.34)' : color
+        context.lineWidth = 6
+        context.stroke()
         context.fillStyle = color
-        context.font = '700 42px system-ui, sans-serif'
+        context.font = '800 58px system-ui, sans-serif'
         context.textAlign = 'center'
         context.textBaseline = 'middle'
-        context.fillText(text, 256, 64)
+        context.fillText(text, 384, 96, 688)
       }
 
       const texture = new THREE.CanvasTexture(canvas)
@@ -2739,32 +2888,93 @@ function PositionScene3D({
           depthTest: false,
         }),
       )
-      sprite.scale.set(Math.min(3.3, Math.max(1.5, text.length * 0.24)), 0.42, 1)
+      sprite.renderOrder = 20
+      sprite.scale.set(Math.min(5.6, Math.max(2.6, text.length * 0.32)), 0.72, 1)
       return sprite
     }
 
+    const leftLabelX = -roomWidthM / 2 + 0.88
+    const rightLabelX = roomWidthM / 2 - 0.88
+    const topLabelY = wallHeightM + 0.44
+    const outdoorMidPoint = new THREE.Vector3(transmitterX / 2, 0.16, transmitterZ / 2)
+    const indoorMidPoint = new THREE.Vector3(0, 0.16, receiverZ / 2)
+    const windowTopPoint = new THREE.Vector3(0, windowBottomM + windowHeightM, -0.08)
+    const namigatePoint = new THREE.Vector3(0, windowCenterY, -0.13)
+
     const labels = [
-	      { label: makeLabel('送信機'), position: new THREE.Vector3(transmitterX, transmitterHeightY + 0.55, transmitterZ) },
-	      { label: makeLabel(`送信高 ${formatMeters(settings.txAntennaHeightM)}`), position: new THREE.Vector3(transmitterX + 0.85, transmitterHeightY / 2, transmitterZ) },
-	      { label: makeLabel(`屋外3D ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`), position: new THREE.Vector3(transmitterX / 2, 0.42, transmitterZ / 2) },
-	      { label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'), position: new THREE.Vector3(transmitterX * 0.28, windowCenterY + 0.35, -0.72) },
-	      { label: makeLabel(`窓幅 ${numberFormatter.format(settings.windowWidthM)}m`, '#0071BD'), position: new THREE.Vector3(0, windowWidthLineY + 0.18, -0.1) },
-	      { label: makeLabel(`窓高 ${numberFormatter.format(settings.windowHeightM)}m`, '#0071BD'), position: new THREE.Vector3(windowHeightLineX - 0.55, windowCenterY, -0.1) },
-	      { label: makeLabel(`窓中心 ${formatMeters(settings.windowCenterHeightM)}`, '#0071BD'), position: new THREE.Vector3(-windowWidthM / 2 - 0.9, windowCenterY, -0.24) },
-	      { label: makeLabel(`ナミゲート ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(settings.namigateHeightCm)}cm`, '#0071BD'), position: new THREE.Vector3(namigateWidthM / 2 + 1.1, windowCenterY, -0.24) },
-	      { label: makeLabel('受信機'), position: new THREE.Vector3(0.65, receiverPoint.y + 0.28, receiverZ) },
-	      { label: makeLabel(`受信高 ${formatMeters(settings.rxAntennaHeightM)}`), position: new THREE.Vector3(0.9, receiverPoint.y / 2, receiverZ) },
-	      { label: makeLabel(`室内3D ${formatMeters(calculateIndoorLinkDistanceM(settings))}`), position: new THREE.Vector3(0.9, 0.38, receiverZ / 2) },
-      { label: makeLabel(`部屋幅 ${numberFormatter.format(settings.roomWidthM)}m`), position: new THREE.Vector3(0, 0.42, roomWidthLineZ + 0.22) },
-      { label: makeLabel(`奥行 ${numberFormatter.format(settings.roomDepthM)}m`), position: new THREE.Vector3(roomDepthLineX + 0.58, 0.42, roomDepthM / 2) },
+      {
+        label: makeLabel('送信機'),
+        position: new THREE.Vector3(leftLabelX, Math.min(topLabelY, transmitterHeightY + 1.3), transmitterZ),
+        target: transmitterPoint,
+      },
+      {
+        label: makeLabel(`送信高 ${formatMeters(settings.txAntennaHeightM)}`),
+        position: new THREE.Vector3(leftLabelX, Math.max(1.35, transmitterHeightY * 0.58), transmitterZ + 0.55),
+        target: new THREE.Vector3(transmitterX, transmitterHeightY / 2, transmitterZ),
+      },
+      {
+        label: makeLabel(`屋外3D ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`),
+        position: new THREE.Vector3(leftLabelX, 0.86, transmitterZ / 2),
+        target: outdoorMidPoint,
+      },
+      {
+        label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'),
+        position: new THREE.Vector3(-windowWidthM / 2 - 1.05, windowCenterY + 1.08, -0.76),
+        target: windowPoint,
+        color: 0xc96c34,
+      },
+      {
+        label: makeLabel(`窓 ${numberFormatter.format(settings.windowWidthM)}×${numberFormatter.format(settings.windowHeightM)}m`, '#0071BD'),
+        position: new THREE.Vector3(0, topLabelY, -0.18),
+        target: windowTopPoint,
+        color: 0x0071bd,
+      },
+      {
+        label: makeLabel(`中心高 ${formatMeters(settings.windowCenterHeightM)}`, '#0071BD'),
+        position: new THREE.Vector3(-windowWidthM / 2 - 1.12, windowCenterY - 0.55, -0.22),
+        target: windowPoint,
+        color: 0x0071bd,
+      },
+      {
+        label: makeLabel(`ナミゲート ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(settings.namigateHeightCm)}cm`, '#0071BD'),
+        position: new THREE.Vector3(windowWidthM / 2 + 1.24, windowCenterY + 0.34, -0.24),
+        target: namigatePoint,
+        color: 0x0071bd,
+      },
+      {
+        label: makeLabel('受信機'),
+        position: new THREE.Vector3(rightLabelX, Math.min(topLabelY, receiverPoint.y + 1.65), receiverZ + 0.1),
+        target: receiverPoint,
+      },
+      {
+        label: makeLabel(`受信高 ${formatMeters(settings.rxAntennaHeightM)}`),
+        position: new THREE.Vector3(rightLabelX, Math.max(1.25, receiverPoint.y + 0.5), receiverZ + 0.78),
+        target: new THREE.Vector3(receiverPoint.x, receiverPoint.y / 2, receiverPoint.z),
+      },
+      {
+        label: makeLabel(`室内3D ${formatMeters(calculateIndoorLinkDistanceM(settings))}`),
+        position: new THREE.Vector3(rightLabelX, 0.86, receiverZ / 2),
+        target: indoorMidPoint,
+      },
+      {
+        label: makeLabel(`部屋幅 ${numberFormatter.format(settings.roomWidthM)}m`),
+        position: new THREE.Vector3(0, 0.72, roomWidthLineZ + 0.34),
+        target: new THREE.Vector3(0, 0.12, roomWidthLineZ),
+      },
+      {
+        label: makeLabel(`奥行 ${numberFormatter.format(settings.roomDepthM)}m`),
+        position: new THREE.Vector3(roomDepthLineX + 0.82, 0.72, roomDepthM / 2),
+        target: new THREE.Vector3(roomDepthLineX, 0.12, roomDepthM / 2),
+      },
     ]
 
-    labels.forEach(({ label, position }) => {
+    labels.forEach(({ label, position, target, color }) => {
       label.position.copy(position)
       scene.add(label)
+      addLeaderLine(position, target, color)
     })
 
-    measurementPoints.slice(0, 24).forEach((point, index) => {
+    measurementPoints.slice(0, 24).forEach((point) => {
       const scenarioColor =
         SCENARIOS.find((scenario) => scenario.key === point.scenario)?.color ?? MAIN_COLOR
       const pointX = clamp(point.xM - roomWidthM / 2, -roomWidthM / 2 + 0.12, roomWidthM / 2 - 0.12)
@@ -2793,14 +3003,6 @@ function PositionScene3D({
       marker.castShadow = true
       markerGroup.add(marker)
       scene.add(markerGroup)
-
-      const markerLabel = makeLabel(
-        `${point.name} ${formatDbm(point.rsrpDbm)}`,
-        scenarioColor,
-      )
-      const sideOffset = index % 2 === 0 ? 0.48 : -0.48
-      markerLabel.position.set(pointX + sideOffset, pointY + 0.36, pointZ)
-      scene.add(markerLabel)
     })
 
     const resize = () => {
@@ -2857,6 +3059,40 @@ function PositionScene3D({
     <div className="position-3d-layout">
       <div className="position-3d-scene" ref={mountRef}>
         <div className="position-3d-help">ドラッグで回転 / ホイールで拡大</div>
+        <div className="position-3d-callout-panel" aria-label="3D寸法サマリー">
+          <div>
+            <span>屋外リンク</span>
+            <strong>{formatMeters(calculateOutdoorLinkDistanceM(settings))}</strong>
+            <small>
+              水平 {formatMeters(settings.outdoorDistanceM)} / 送信高{' '}
+              {formatMeters(settings.txAntennaHeightM)}
+            </small>
+          </div>
+          <div>
+            <span>入射角</span>
+            <strong>{numberFormatter.format(settings.incidentAngleDeg)}°</strong>
+            <small>角度損失 {formatDb(angleLossDb)}</small>
+          </div>
+          <div>
+            <span>窓・ナミゲート</span>
+            <strong>
+              {numberFormatter.format(settings.windowWidthM)}×
+              {numberFormatter.format(settings.windowHeightM)}m
+            </strong>
+            <small>
+              NG {numberFormatter.format(settings.namigateWidthCm)}×
+              {numberFormatter.format(settings.namigateHeightCm)}cm
+            </small>
+          </div>
+          <div>
+            <span>室内リンク</span>
+            <strong>{formatMeters(calculateIndoorLinkDistanceM(settings))}</strong>
+            <small>
+              室内 {formatMeters(settings.indoorDistanceM)} / 受信高{' '}
+              {formatMeters(settings.rxAntennaHeightM)}
+            </small>
+          </div>
+        </div>
       </div>
       <div className="position-3d-facts">
         <div>
@@ -3362,6 +3598,8 @@ function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [measuredRsrpValues, setMeasuredRsrpValues] =
     useState<MeasuredRsrpValues>(DEFAULT_MEASURED_RSRP)
+  const [theoryRsrpValues, setTheoryRsrpValues] =
+    useState<TheoryRsrpValues>(DEFAULT_THEORY_RSRP)
   const [measurementCsvText, setMeasurementCsvText] = useState(SAMPLE_MEASUREMENT_CSV)
   const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([])
   const [importStatus, setImportStatus] = useState('')
@@ -3406,6 +3644,11 @@ function App() {
 
   const updateMeasuredRsrp = (key: ScenarioKey, value: string) => {
     setMeasuredRsrpValues((current) => ({ ...current, [key]: value }))
+    setCopyStatus('')
+  }
+
+  const updateTheoryRsrp = (key: ScenarioKey, value: string) => {
+    setTheoryRsrpValues((current) => ({ ...current, [key]: value }))
     setCopyStatus('')
   }
 
@@ -3535,6 +3778,25 @@ function App() {
     [measuredRsrpValues, scenarioResults],
   )
 
+  const theoryComparisons = useMemo<TheoryComparison[]>(
+    () =>
+      measuredComparisons.map((comparison) => {
+        const theoryRsrpDbm = parseOptionalNumber(theoryRsrpValues[comparison.key])
+
+        return {
+          ...comparison,
+          theoryRsrpDbm,
+          measuredVsTheoryDb:
+            comparison.measuredRsrpDbm === null || theoryRsrpDbm === null
+              ? null
+              : comparison.measuredRsrpDbm - theoryRsrpDbm,
+          estimatedVsTheoryDb:
+            theoryRsrpDbm === null ? null : comparison.rsrpDbm - theoryRsrpDbm,
+        }
+      }),
+    [measuredComparisons, theoryRsrpValues],
+  )
+
   const pointComparisons = useMemo(
     () => buildPointComparisons(settings, measurementPoints),
     [measurementPoints, settings],
@@ -3594,6 +3856,93 @@ function App() {
     measuredNamigateGainDb === null
       ? null
       : measuredNamigateGainDb - estimatedNamigateGainDb
+  const theoryNoWindowRsrp = theoryComparisons[0].theoryRsrpDbm
+  const theoryWithWindowRsrp = theoryComparisons[1].theoryRsrpDbm
+  const theoryWithNamigateRsrp = theoryComparisons[2].theoryRsrpDbm
+  const theoryWindowLossDb = subtractNullable(theoryNoWindowRsrp, theoryWithWindowRsrp)
+  const theoryNamigateGainDb = subtractNullable(
+    theoryWithNamigateRsrp,
+    theoryWithWindowRsrp,
+  )
+  const measuredGlassOnlyLossDb =
+    measuredWindowLossDb === null ? null : measuredWindowLossDb - angleLossDb
+  const theoryGlassOnlyLossDb =
+    theoryWindowLossDb === null ? null : theoryWindowLossDb - angleLossDb
+  const measuredRecoveryRate = recoveryPercentNullable(
+    measuredNamigateGainDb,
+    measuredWindowLossDb,
+  )
+  const theoryRecoveryRate = recoveryPercentNullable(
+    theoryNamigateGainDb,
+    theoryWindowLossDb,
+  )
+  const measuredVsTheoryAverageGapDb = averageNullable(
+    theoryComparisons.map((comparison) => comparison.measuredVsTheoryDb),
+  )
+  const fieldEffectRows = useMemo<EffectSummaryRow[]>(
+    () => [
+      {
+        label: '窓を閉めた影響',
+        model: formatDb(settings.windowLossDb + angleLossDb),
+        measured: formatOptionalDb(measuredWindowLossDb),
+        theory: formatOptionalDb(theoryWindowLossDb),
+        delta: formatOptionalDb(subtractNullable(measuredWindowLossDb, theoryWindowLossDb)),
+        memo: '窓開放相当から閉鎖状態へ落ちた量。窓材、入射角、施工条件を含みます。',
+      },
+      {
+        label: '入射角の影響',
+        model: formatDb(angleLossDb),
+        measured: '角度別再測で分離',
+        theory: '角度別計算で比較',
+        delta: '-',
+        memo: '同じ窓で角度を振ると、窓材由来の損失と角度由来の損失を分けやすくなります。',
+      },
+      {
+        label: 'ガラス由来の損失推定',
+        model: formatDb(settings.windowLossDb),
+        measured: formatOptionalDb(measuredGlassOnlyLossDb),
+        theory: formatOptionalDb(theoryGlassOnlyLossDb),
+        delta: formatOptionalDb(
+          subtractNullable(measuredGlassOnlyLossDb, theoryGlassOnlyLossDb),
+        ),
+        memo: '窓を閉めた影響から、現在モデルの入射角損失を差し引いた概算です。',
+      },
+      {
+        label: 'ナミゲート実効改善',
+        model: formatDb(estimatedNamigateGainDb),
+        measured: formatOptionalDb(measuredNamigateGainDb),
+        theory: formatOptionalDb(theoryNamigateGainDb),
+        delta: formatOptionalDb(
+          subtractNullable(measuredNamigateGainDb, theoryNamigateGainDb),
+        ),
+        memo: '閉鎖＋ナミゲートありが、閉鎖＋ナミゲートなしから何dB上がったかです。',
+      },
+      {
+        label: '窓なしへの回復率',
+        model: `${numberFormatter.format(clamp(recoveryRate, 0, 100))}%`,
+        measured: formatOptionalPercent(measuredRecoveryRate),
+        theory: formatOptionalPercent(theoryRecoveryRate),
+        delta: formatOptionalPercent(
+          subtractNullable(measuredRecoveryRate, theoryRecoveryRate),
+        ),
+        memo: '窓で落ちた分のうち、ナミゲートで何%戻せたかを示します。',
+      },
+    ],
+    [
+      angleLossDb,
+      estimatedNamigateGainDb,
+      measuredGlassOnlyLossDb,
+      measuredNamigateGainDb,
+      measuredRecoveryRate,
+      measuredWindowLossDb,
+      recoveryRate,
+      settings.windowLossDb,
+      theoryGlassOnlyLossDb,
+      theoryNamigateGainDb,
+      theoryRecoveryRate,
+      theoryWindowLossDb,
+    ],
+  )
 
   const aiAnalysisText = useMemo(
     () =>
@@ -3602,11 +3951,14 @@ function App() {
         protocol,
         scenarioResults,
         measuredComparisons,
+        theoryComparisons,
+        fieldEffectRows,
         angleLossDb,
         areaGainDb,
         totalNamigateGainDb,
         recoveryRate,
         measuredAverageResidualDb,
+        measuredVsTheoryAverageGapDb,
         measuredWindowLossDb,
         measuredNamigateGainDb,
       }),
@@ -3615,11 +3967,14 @@ function App() {
       protocol,
       scenarioResults,
       measuredComparisons,
+      theoryComparisons,
+      fieldEffectRows,
       angleLossDb,
       areaGainDb,
       totalNamigateGainDb,
       recoveryRate,
       measuredAverageResidualDb,
+      measuredVsTheoryAverageGapDb,
       measuredWindowLossDb,
       measuredNamigateGainDb,
     ],
@@ -3826,6 +4181,8 @@ function App() {
         settings,
         protocol,
         scenarioResults,
+        theoryComparisons,
+        fieldEffectRows,
         pointComparisons,
         errorStats: pointErrorStats,
         qualityStats,
@@ -3836,6 +4193,7 @@ function App() {
     [
       calibrationResult,
       confidenceRows,
+      fieldEffectRows,
       pointComparisons,
       pointErrorStats,
       protocol,
@@ -3843,6 +4201,7 @@ function App() {
       scenarioResults,
       sensitivityRows,
       settings,
+      theoryComparisons,
     ],
   )
 
@@ -3932,6 +4291,7 @@ function App() {
       savedAt: new Date().toISOString(),
       settings,
       measuredRsrpValues,
+      theoryRsrpValues,
       measurementPoints,
       protocol,
     }
@@ -3956,6 +4316,10 @@ function App() {
 
     setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
     setMeasuredRsrpValues(savedCase.measuredRsrpValues)
+    setTheoryRsrpValues({
+      ...DEFAULT_THEORY_RSRP,
+      ...(savedCase.theoryRsrpValues ?? {}),
+    })
     setMeasurementPoints(savedCase.measurementPoints)
     setProtocol({
       ...DEFAULT_PROTOCOL,
@@ -4544,6 +4908,32 @@ function App() {
                 </div>
               </label>
             ))}
+            <div className="model-note theory-note">
+              <strong>外部理論計算値</strong>
+              <span>
+                別途計算した理論RSRPを入力すると、実測値との差分とdB寄与分解を右側の実測データタブで比較できます。
+                社名・顧客名などの固有名は入れず、計算条件だけを残してください。
+              </span>
+            </div>
+            <div className="protocol-mini-grid">
+              {SCENARIOS.map((scenario) => (
+                <label className="control measurement-input" key={scenario.key}>
+                  <span>理論RSRP（{scenario.label}）</span>
+                  <div className="input-row">
+                    <input
+                      type="number"
+                      value={theoryRsrpValues[scenario.key]}
+                      step={0.1}
+                      placeholder="-80"
+                      onChange={(event) =>
+                        updateTheoryRsrp(scenario.key, event.target.value)
+                      }
+                    />
+                    <small>dBm</small>
+                  </div>
+                </label>
+              ))}
+            </div>
             <div className="model-note sample-note">
               <strong>観測N数の考え方</strong>
               <span>{getObservationCountGuidance(protocol.observationCount)}</span>
@@ -4861,6 +5251,36 @@ function App() {
                 ))}
               </div>
 
+              <div className="theory-input-panel">
+                <div className="subsection-heading">
+                  <h3>外部理論計算値</h3>
+                  <span>実測値と同じ3状態のRSRPを入力</span>
+                </div>
+                <p>
+                  窓開放相当、窓閉鎖、窓閉鎖＋ナミゲートの理論RSRPを入れると、
+                  実測値との差と、窓・入射角・ナミゲートの寄与をdBで比較できます。
+                </p>
+                <div className="measurement-input-grid">
+                  {SCENARIOS.map((scenario) => (
+                    <label className="control measurement-input" key={scenario.key}>
+                      <span>理論RSRP（{scenario.label}）</span>
+                      <div className="input-row">
+                        <input
+                          type="number"
+                          value={theoryRsrpValues[scenario.key]}
+                          step={0.1}
+                          placeholder="-80"
+                          onChange={(event) =>
+                            updateTheoryRsrp(scenario.key, event.target.value)
+                          }
+                        />
+                        <small>dBm</small>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div
                 className="measurement-table"
                 role="table"
@@ -4904,6 +5324,49 @@ function App() {
                 ))}
               </div>
 
+              <div
+                className="measurement-table theory-table"
+                role="table"
+                aria-label="外部理論計算値との比較"
+              >
+                <div className="measurement-row theory-row is-head" role="row">
+                  <span role="columnheader">状態</span>
+                  <span role="columnheader">実測</span>
+                  <span role="columnheader">外部理論</span>
+                  <span role="columnheader">実測-理論</span>
+                  <span role="columnheader">推定-理論</span>
+                </div>
+                {theoryComparisons.map((comparison) => (
+                  <div className="measurement-row theory-row" key={comparison.key} role="row">
+                    <span data-label="状態" role="cell">
+                      {comparison.label}
+                    </span>
+                    <strong data-label="実測" role="cell">
+                      {formatOptionalDbm(comparison.measuredRsrpDbm)}
+                    </strong>
+                    <strong data-label="外部理論" role="cell">
+                      {formatOptionalDbm(comparison.theoryRsrpDbm)}
+                    </strong>
+                    <strong
+                      className={
+                        comparison.measuredVsTheoryDb === null
+                          ? 'is-muted'
+                          : comparison.measuredVsTheoryDb >= 0
+                            ? 'is-positive'
+                            : 'is-negative'
+                      }
+                      data-label="実測-理論"
+                      role="cell"
+                    >
+                      {formatOptionalDb(comparison.measuredVsTheoryDb)}
+                    </strong>
+                    <span data-label="推定-理論" role="cell">
+                      {formatOptionalDb(comparison.estimatedVsTheoryDb)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
               <div className="measurement-summary">
                 <article>
                   <span>観測N数</span>
@@ -4927,6 +5390,55 @@ function App() {
                     推定差 {formatOptionalDb(measuredNamigateGapDb)}
                   </small>
                 </article>
+                <article>
+                  <span>実測-理論 平均差</span>
+                  <strong>{formatOptionalDb(measuredVsTheoryAverageGapDb)}</strong>
+                  <small>3状態の入力済み理論値との差</small>
+                </article>
+                <article>
+                  <span>実測回復率</span>
+                  <strong>{formatOptionalPercent(measuredRecoveryRate)}</strong>
+                  <small>窓で落ちた分を何%戻したか</small>
+                </article>
+              </div>
+
+              <div className="field-effect-panel">
+                <div className="subsection-heading">
+                  <h3>実地調査で見積もれるdB寄与</h3>
+                  <span>窓開放・窓閉鎖・ナミゲート有無を分解</span>
+                </div>
+                <div className="effect-table" role="table" aria-label="dB寄与分解">
+                  <div className="effect-row is-head" role="row">
+                    <span role="columnheader">項目</span>
+                    <span role="columnheader">アプリモデル</span>
+                    <span role="columnheader">実測</span>
+                    <span role="columnheader">外部理論</span>
+                    <span role="columnheader">実測-理論</span>
+                    <span role="columnheader">読み方</span>
+                  </div>
+                  {fieldEffectRows.map((row) => (
+                    <div className="effect-row" key={row.label} role="row">
+                      <strong data-label="項目" role="cell">
+                        {row.label}
+                      </strong>
+                      <span data-label="アプリモデル" role="cell">
+                        {row.model}
+                      </span>
+                      <span data-label="実測" role="cell">
+                        {row.measured}
+                      </span>
+                      <span data-label="外部理論" role="cell">
+                        {row.theory}
+                      </span>
+                      <span data-label="実測-理論" role="cell">
+                        {row.delta}
+                      </span>
+                      <small data-label="読み方" role="cell">
+                        {row.memo}
+                      </small>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="csv-import-panel">
@@ -5138,6 +5650,16 @@ function App() {
                     {formatOptionalDb(calibrationResult.afterRmseDb)}
                   </strong>
                   <small>CSV実測点ベース</small>
+                </article>
+                <article>
+                  <span>実測-理論 平均差</span>
+                  <strong>{formatOptionalDb(measuredVsTheoryAverageGapDb)}</strong>
+                  <small>3状態の外部理論RSRPと比較</small>
+                </article>
+                <article>
+                  <span>実測回復率</span>
+                  <strong>{formatOptionalPercent(measuredRecoveryRate)}</strong>
+                  <small>窓損失を何%戻したか</small>
                 </article>
               </div>
 

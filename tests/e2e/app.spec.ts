@@ -325,6 +325,17 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
       name: labelRegex('実測RSRP（窓あり＋ナミゲート）'),
     })
     .fill('-79.5')
+  await resultsPanel
+    .getByRole('spinbutton', { name: labelRegex('理論RSRP（窓なし）') })
+    .fill('-65')
+  await resultsPanel
+    .getByRole('spinbutton', { name: labelRegex('理論RSRP（窓あり）') })
+    .fill('-108')
+  await resultsPanel
+    .getByRole('spinbutton', {
+      name: labelRegex('理論RSRP（窓あり＋ナミゲート）'),
+    })
+    .fill('-81')
 
   const comparisonTable = page.getByRole('table', {
     name: '推定値と実測値の比較',
@@ -333,6 +344,12 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   await expect(comparisonTable).toContainText('-106.5 dBm')
   await expect(comparisonTable).toContainText('-79.5 dBm')
   await expect(page.getByText('実測のナミゲート改善')).toBeVisible()
+  await expect(page.getByRole('table', { name: '外部理論計算値との比較' })).toContainText(
+    '-108 dBm',
+  )
+  await expect(page.getByRole('table', { name: 'dB寄与分解' })).toContainText(
+    'ナミゲート実効改善',
+  )
 
   await page.getByRole('button', { name: 'AI分析用データをコピー' }).click()
   await expect(resultsPanel).toContainText('AI分析用データをコピーしました')
@@ -340,6 +357,10 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   const copiedText = await page.evaluate(() => navigator.clipboard.readText())
   expect(copiedText).toContain('# ローカル5G 窓面電波改善シミュレータ 実測比較データ')
   expect(copiedText).toContain('- 観測N数: N=25')
+  expect(copiedText).toContain('## 外部理論計算値との比較')
+  expect(copiedText).toContain('| 窓あり |')
+  expect(copiedText).toContain('-108 dBm')
+  expect(copiedText).toContain('## dB寄与分解')
   expect(copiedText).toContain('| 窓あり＋ナミゲート |')
   expect(copiedText).toContain('-79.5 dBm')
   expect(copiedText).toContain('## 改善効果')
@@ -359,6 +380,7 @@ test('モバイル幅でも3Dビューと主要カードが横にはみ出さな
   expect(canvasBox?.height).toBeGreaterThan(330)
 
   await expect(page.locator('.position-3d-facts div')).toHaveCount(4)
+  await expect(page.locator('.position-3d-callout-panel div')).toHaveCount(4)
   await expect(page.locator('.heatmap-card')).toHaveCount(3)
 
   const hasHorizontalOverflow = await page.evaluate(

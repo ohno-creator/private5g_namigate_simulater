@@ -331,10 +331,87 @@
   line-height: 1.55;
 }
 
+.guidance-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #cfe0ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.guidance-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.guidance-heading strong {
+  color: #0071bd;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.guidance-heading span {
+  color: #384757;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.guidance-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.guidance-card {
+  border: 1px solid #d8e2ea;
+  border-radius: 7px;
+  background: #f8fbfd;
+}
+
+.guidance-card summary {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.guidance-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.guidance-card summary span {
+  color: #172330;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guidance-card summary small {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.guidance-card[open] summary {
+  border-bottom: 1px solid #d8e2ea;
+}
+
+.guidance-card p {
+  margin: 0;
+  padding: 10px;
+  color: #657380;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
 .protocol-mini-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .review-panel {
@@ -1710,6 +1787,66 @@
   line-height: 1.65;
 }
 
+.column-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.column-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.column-card {
+  min-width: 0;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.column-card summary {
+  display: grid;
+  gap: 7px;
+  padding: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.column-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.column-card summary strong {
+  color: #172330;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.column-card summary span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.column-card[open] summary {
+  border-bottom: 1px solid #d8e2ea;
+}
+
+.column-card p {
+  margin: 0;
+  padding: 13px;
+  color: #526271;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+
 .principle-grid,
 .evidence-grid {
   display: grid;
@@ -1833,6 +1970,7 @@
   .protocol-grid,
   .case-controls,
   .checklist-grid,
+  .column-list,
   .evidence-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1877,6 +2015,7 @@
   .protocol-mini-grid,
   .case-controls,
   .checklist-grid,
+  .column-list,
   .position-3d-facts,
   .position-facts,
   .coverage-grid,

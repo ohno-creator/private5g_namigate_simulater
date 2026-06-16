@@ -70,6 +70,9 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
   await expect(page.locator('.propagation-note strong')).toHaveText(
     '自由空間損失（FSPL）',
   )
+  const radioGuidance = page.getByLabel('無線・屋外の入力目安の解説')
+  await expect(radioGuidance.getByText('入力目安と根拠')).toBeVisible()
+  await expect(radioGuidance.getByText('日本のローカル5G検討ではSub6')).toBeVisible()
 
   await expect(metricCard(page, '窓損失')).toContainText('40 dB')
   await expect(metricCard(page, 'ナミゲート総改善量')).toContainText('31 dB')
@@ -115,6 +118,14 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
 
   await expect(page.locator('.chart-card')).toHaveCount(4)
   await expect(page.locator('.chart-card .recharts-responsive-container')).toHaveCount(4)
+
+  await openTab(page, '根拠')
+  await expect(page.getByRole('heading', { name: 'モデルとUI設計の根拠' })).toBeVisible()
+  await expect(page.getByText('短いコラム')).toBeVisible()
+  await expect(page.getByText('N=1で判断しない理由')).toBeVisible()
+  await expect(
+    page.getByText('IEEE Communications Society RIS Best Readings'),
+  ).toBeVisible()
   await expect(
     page.getByText('これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである'),
   ).toBeVisible()
@@ -298,10 +309,22 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   })
   await page.goto('/')
 
+  await openInputStep(page, '実測・保存')
+  await controlInput(page, '観測N数').fill('25')
+
   await openTab(page, '実測データ')
-  await controlInput(page, '実測RSRP（窓なし）').fill('-64')
-  await controlInput(page, '実測RSRP（窓あり）').fill('-106.5')
-  await controlInput(page, '実測RSRP（窓あり＋ナミゲート）').fill('-79.5')
+  const resultsPanel = page.locator('.results-panel')
+  await resultsPanel
+    .getByRole('spinbutton', { name: labelRegex('実測RSRP（窓なし）') })
+    .fill('-64')
+  await resultsPanel
+    .getByRole('spinbutton', { name: labelRegex('実測RSRP（窓あり）') })
+    .fill('-106.5')
+  await resultsPanel
+    .getByRole('spinbutton', {
+      name: labelRegex('実測RSRP（窓あり＋ナミゲート）'),
+    })
+    .fill('-79.5')
 
   const comparisonTable = page.getByRole('table', {
     name: '推定値と実測値の比較',
@@ -312,12 +335,11 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   await expect(page.getByText('実測のナミゲート改善')).toBeVisible()
 
   await page.getByRole('button', { name: 'AI分析用データをコピー' }).click()
-  await expect(page.locator('.results-panel')).toContainText(
-    'AI分析用データをコピーしました',
-  )
+  await expect(resultsPanel).toContainText('AI分析用データをコピーしました')
 
   const copiedText = await page.evaluate(() => navigator.clipboard.readText())
   expect(copiedText).toContain('# ローカル5G 窓面電波改善シミュレータ 実測比較データ')
+  expect(copiedText).toContain('- 観測N数: N=25')
   expect(copiedText).toContain('| 窓あり＋ナミゲート |')
   expect(copiedText).toContain('-79.5 dBm')
   expect(copiedText).toContain('## 改善効果')

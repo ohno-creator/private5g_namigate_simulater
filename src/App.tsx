@@ -218,6 +218,7 @@ type TestProtocol = {
   operatorName: string
   deviceName: string
   measurementHeightM: number
+  observationCount: number
   averagingSeconds: number
   samplesPerPoint: number
   antennaDirection: string
@@ -533,10 +534,17 @@ const EVIDENCE_ITEMS: {
 }[] = [
   {
     category: '電波標準',
-    title: '5Gチャネルモデル標準資料',
+    title: '3GPP TR 38.901 チャネルモデル',
     summary:
-      '0.5-100GHz帯の屋外、屋内、屋外-屋内モデルを扱い、建物侵入損失や室内距離損失を分けて考える根拠にしています。',
+      '0.5-100GHz帯の屋外、屋内、屋外-屋内モデルを扱う標準資料です。窓、建物侵入、室内距離損失を分けて考える根拠にしています。',
     url: 'https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3173',
+  },
+  {
+    category: '電波標準',
+    title: '3GPP Release 19のチャネルモデル更新',
+    summary:
+      'Release 19では7-24GHz帯の検討や屋外-屋内モデルの更新議論が進み、4.7GHzと28GHzの間の周波数帯も標準化上の関心領域になっています。',
+    url: 'https://www.etsi.org/deliver/etsi_tr/138900_138999/138901/19.02.00_60/tr_138901v190200p.pdf',
   },
   {
     category: '建物侵入損失',
@@ -554,10 +562,45 @@ const EVIDENCE_ITEMS: {
   },
   {
     category: '測定計画',
+    title: '室内伝搬モデルの国際推奨',
+    summary:
+      '2025年版では300MHz-450GHzの屋内伝搬を扱い、送受信位置、偏波、什器、人の移動などが室内評価に効くことを整理しています。',
+    url: 'https://www.itu.int/dms_pubrec/itu-r/rec/p/R-REC-P.1238-13-202509-I%21%21PDF-E.pdf',
+  },
+  {
+    category: '測定計画',
     title: '建物侵入損失モデルの実測検証',
     summary:
       '標準モデルと現場測定の差を評価する資料で、測定高さ、位置、環境条件を残す設計の根拠にしています。',
     url: 'https://its.ntia.gov/publications/details?pub=3262',
+  },
+  {
+    category: 'ローカル5G',
+    title: 'ローカル5G免許申請支援マニュアル',
+    summary:
+      '日本のローカル5G制度、SA/NSA、免許申請、自己土地/他者土地、周波数利用条件を確認するための基礎資料です。',
+    url: 'https://5gmf.jp/case/6326/',
+  },
+  {
+    category: '窓・メタサーフェス',
+    title: '窓面透過改善メタサーフェス研究',
+    summary:
+      '窓に取り付ける透過型メタサーフェスでO2Iカバレッジ改善を狙う研究です。角度、偏波、単板/複層ガラスへの実装が論点になります。',
+    url: 'https://www.nature.com/articles/s41598-024-51447-3',
+  },
+  {
+    category: 'IEEE動向',
+    title: 'IEEE Communications Society RIS Best Readings',
+    summary:
+      'RIS/IRSのモデリング、設計、実装、標準化議論を追う入口です。ナミゲートのような窓面改善仮説を、厳密解析とは分けて扱う根拠にしています。',
+    url: 'https://www.comsoc.org/publications/best-readings/reconfigurable-intelligent-surfaces',
+  },
+  {
+    category: 'IEEE動向',
+    title: 'IEEE Communications Standards Magazine RIS特集',
+    summary:
+      '5G-Advancedから6Gへ向かう中で、RISが伝搬環境を再構成する技術として議論されていることを示すIEEE ComSocの案内です。',
+    url: 'https://www.comsoc.org/publications/magazines/ieee-communications-standards-magazine/cfp/reconfigurable-intelligent',
   },
   {
     category: 'UI設計',
@@ -572,6 +615,193 @@ const EVIDENCE_ITEMS: {
     summary:
       '商用フォームで、説明文、近接した補足、入力のまとまりを使って迷いを減らす設計原則を参照しています。',
     url: 'https://baymard.com/blog/form-field-descriptions',
+  },
+]
+
+const PARAMETER_GUIDANCE: Record<
+  InputStepId,
+  {
+    title: string
+    items: Array<{
+      label: string
+      guideline: string
+      basis: string
+    }>
+  }
+> = {
+  radio: {
+    title: '無線・屋外の入力目安',
+    items: [
+      {
+        label: '周波数',
+        guideline:
+          '日本のローカル5G検討ではSub6は4.6-4.9GHz、ミリ波は28.2-29.1GHzをまず候補にします。実証値と合わせる場合は実際の中心周波数を入れます。',
+        basis:
+          'ローカル5G制度資料と3GPP TR 38.901の0.5-100GHzモデルを参照。Release 19では7-24GHz帯の議論も進んでいます。',
+      },
+      {
+        label: 'EIRP/送信出力',
+        guideline:
+          '免許・機器仕様に基づく値を優先します。仕様不明ならEIRP直接入力、構成が分かるなら送信出力＋アンテナ利得−給電損失で詳細計算します。',
+        basis:
+          'ローカル5Gは免許制で、アプリは法令適合判定ではありません。申請値、空中線電力、給電損失の管理が必要です。',
+      },
+      {
+        label: '屋外伝搬モデル',
+        guideline:
+          '短距離・見通しの窓面評価はFSPLから開始します。奥村-秦は150-1500MHz・km級・高い基地局の経験式なので、4.7GHz/28GHzでは比較用に留めます。',
+        basis:
+          '3GPP/ITU系モデルでは屋外、建物侵入、室内を分けます。奥村-秦はローカル5Gの窓面近距離評価そのものではありません。',
+      },
+      {
+        label: 'アンテナ高・指向・偏波',
+        guideline:
+          '送信高、受信高、窓中心高を実測条件に合わせ、指向ずれや偏波不整合は0-3dB程度から現場に合わせて調整します。',
+        basis:
+          'ITU-R P.1238は送受信位置、アンテナ放射、偏波、室内物体の影響を屋内伝搬評価の要素として扱います。',
+      },
+    ],
+  },
+  windowRoom: {
+    title: '窓・室内の入力目安',
+    items: [
+      {
+        label: '窓損失',
+        guideline:
+          '通常ガラスは数dB、複層は10dB級、Low-E/金属膜入りは30-40dB級を初期仮説にし、実測で校正します。',
+        basis:
+          'ITU-R P.2109は従来型建物と熱効率の高い建物を分けます。Low-Eや金属膜は熱効率と電波透過の両方に関係します。',
+      },
+      {
+        label: '入射角',
+        guideline:
+          '90度を正面入射、60度で軽微、45度以下で悪化が目立つ仮定から始めます。窓面に対する基地局方向を図と合わせます。',
+        basis:
+          '建物侵入損失の測定では周波数だけでなく入射角、偏波、建物構成の違いがばらつき要因になります。',
+      },
+      {
+        label: '屋内伝搬指数',
+        guideline:
+          '見通しの良い室内は2前後、什器・人・間仕切りが多い環境は2.5-3以上から確認します。',
+        basis:
+          'ITU-R P.1238は家具、壁、人や物体の移動、送受信位置が屋内伝搬に影響することを整理しています。',
+      },
+      {
+        label: '室内距離と部屋寸法',
+        guideline:
+          '代表受信点だけでなく、実際に使いたい奥行・横幅を入れます。接続可能面積はこの寸法に強く依存します。',
+        basis:
+          '屋外-屋内評価では窓通過後の室内奥行損失を別に見ると、窓損失と室内減衰を切り分けやすくなります。',
+      },
+    ],
+  },
+  namigate: {
+    title: 'ナミゲート仮説の入力目安',
+    items: [
+      {
+        label: '改善量',
+        guideline:
+          '保守3dB、標準10dB、Low-E改善例25dBは仮説値です。実証では窓ありとの差分と窓なしへの回復率で評価します。',
+        basis:
+          'RIS/メタサーフェス研究では伝搬環境の再構成が論点ですが、実装、損失、偏波、角度で効果が変わるため実測校正が必要です。',
+      },
+      {
+        label: 'サイズ・面積補正',
+        guideline:
+          '10cm×10cmを基準に、面積を増やすと改善余地が増える仮定です。上限を設定して過大評価を防ぎます。',
+        basis:
+          '窓面メタサーフェス研究では単位セル、周期構造、有効開口、ガラス実装が性能を左右します。',
+      },
+      {
+        label: '設置効率・追加損失',
+        guideline:
+          '位置ずれ、貼付状態、偏波ずれが疑わしい場合は設置効率を70-90%、追加損失を1-3dBから試します。',
+        basis:
+          '実験室値と現場値の差を吸収するための実務パラメータです。AI分析時もこの値を明示します。',
+      },
+    ],
+  },
+  measurement: {
+    title: '実測・N数の入力目安',
+    items: [
+      {
+        label: '観測N数',
+        guideline:
+          'N=1は瞬間確認です。比較評価ではN=10以上、できればN=30以上の平均または中央値を使います。',
+        basis:
+          'フェージング、人の移動、端末測定更新周期でRSRPは揺れます。N数と平均化時間を残すと再現性を説明できます。',
+      },
+      {
+        label: '平均化時間',
+        guideline:
+          '静的な窓面評価は30秒程度から開始します。人流や移動体がある場合は長め、または時間帯を分けて測ります。',
+        basis:
+          '測定ばらつきを小さくするには、同一端末、同一高さ、同一向き、同一点の条件を固定する必要があります。',
+      },
+      {
+        label: 'SINR/RSRQ/DL/UL',
+        guideline:
+          'RSRPが改善してもSINRやスループットが伸びない場合があります。CSVでは品質指標も残します。',
+        basis:
+          'ローカル5Gの実証では、受信強度だけでなく干渉、品質、アップリンク/ダウンリンク用途を合わせて判断します。',
+      },
+    ],
+  },
+  review: {
+    title: '結果確認の目安',
+    items: [
+      {
+        label: '回復率',
+        guideline:
+          '窓ありで落ちた分のうち、ナミゲートで何%戻せたかを主指標にします。100%に近いほど窓なし相当です。',
+        basis:
+          'このアプリの重要コンセプトは「窓ありと窓なしの差をどれだけ埋めたか」です。',
+      },
+      {
+        label: '接続可能面積',
+        guideline:
+          '代表点だけでなく部屋全体の面積で確認します。商談・実証では図と面積の説明が伝わりやすいです。',
+        basis:
+          '屋内利用価値は1点のRSRPより、使える面積と到達距離で判断されやすいためです。',
+      },
+    ],
+  },
+}
+
+const RESEARCH_COLUMNS: Array<{
+  title: string
+  summary: string
+  body: string
+}> = [
+  {
+    title: 'N=1で判断しない理由',
+    summary: 'RSRPは静止測定でも揺れるため、N数と平均化時間を残すと説明力が上がります。',
+    body:
+      '窓面のように反射や透過が絡む環境では、端末のわずかな位置差、人の移動、測定周期で数dBの差が出ます。N=1はその瞬間の値としては有用ですが、窓あり/ナミゲートありの比較には弱いです。まずN=10以上、判断資料ではN=30以上を目安にし、可能なら平均値だけでなく中央値、最小/最大、標準偏差も残します。',
+  },
+  {
+    title: 'Low-E窓はなぜ要注意か',
+    summary: '熱効率の高い窓は金属膜などにより建物侵入損失が大きくなる場合があります。',
+    body:
+      'ITU-R P.2109では建物侵入損失を従来型建物と熱効率の高い建物に分けて扱います。Low-Eや金属膜入りガラスは、熱を制御する層が電波透過にも効くことがあり、通常ガラスより大きな損失仮説を置く方が現場説明に向いています。ただし窓メーカー、膜構成、周波数、入射角で差が出るため、実測校正が前提です。',
+  },
+  {
+    title: '奥村-秦と3GPPモデルの使い分け',
+    summary: '奥村-秦は古典的なマクロセル経験式で、ローカル5G窓面近距離では比較用に留めます。',
+    body:
+      '奥村-秦モデルは150-1500MHz、km級距離、比較的高い基地局を前提にした経験式です。ローカル5Gの4.7GHzや28GHz、建物窓面への短距離入射では適用範囲外になりやすいため、FSPLや3GPP/ITU系の考え方と併用し、実測で補正してください。',
+  },
+  {
+    title: 'ナミゲートとRIS/メタサーフェス動向',
+    summary: 'IEEEや学術論文ではRIS/メタサーフェスが6Gに向けた伝搬環境制御技術として議論されています。',
+    body:
+      'RIS/IRSや透過型メタサーフェスは、反射・透過・位相制御により通信環境を改善する研究テーマです。一方で実用効果は周波数、偏波、角度、サイズ、損失、設置条件に依存します。このアプリでは「改善量」を物理定数として固定せず、仮説値として入力し、窓なしへの回復率と実測校正で判断する構成にしています。',
+  },
+  {
+    title: 'ローカル5G実証で残すべき条件',
+    summary: '免許条件とは別に、測定の再現性を支えるメタ情報が重要です。',
+    body:
+      'ローカル5Gは周波数、設置場所、自己土地/他者土地、同期条件、空中線電力など制度面の確認が必要です。実証ではさらに、端末、アンテナ向き、測定高さ、N数、平均化時間、人流、遮蔽物、天候、窓位置を残すと、後からAI分析や再測定で原因を切り分けやすくなります。',
   },
 ]
 
@@ -664,6 +894,7 @@ const HELP_TEXT: Record<string, string> = {
   '最大総改善量': 'ナミゲートによる総改善量の上限です。',
   '接続しきい値': 'このRSRP以上なら接続可能とみなす判定基準です。実運用ではRSRPだけでなくSINR、RSRQ、スループットも合わせて確認します。',
   '測定高さ': '実測時の端末またはアンテナ高さです。比較時は高さを固定すると誤差を読みやすくなります。',
+  '観測N数': '手入力する実測RSRPを作る元データ数です。N=1は瞬間値に近く、フェージングや測定更新周期の影響を受けやすいため、比較評価では複数サンプルの平均または中央値を使います。',
   '平均化時間': '1点あたり何秒測って平均するかです。短すぎると瞬間的なフェージングの影響が残ります。',
   'サンプル数/点': '1つの測定点で記録するサンプル数です。ばらつき確認に使います。',
 }
@@ -732,8 +963,9 @@ const DEFAULT_PROTOCOL: TestProtocol = {
   operatorName: '',
   deviceName: '',
   measurementHeightM: 1.2,
+  observationCount: 30,
   averagingSeconds: 30,
-  samplesPerPoint: 10,
+  samplesPerPoint: 30,
   antennaDirection: '窓面へ正対',
   weather: '',
   notes: '',
@@ -779,6 +1011,22 @@ function formatNumberInputValue(value: number) {
 
 function isValidNumberInput(value: string) {
   return value.trim() !== '' && Number.isFinite(Number(value))
+}
+
+function getObservationCountGuidance(count: number) {
+  if (count <= 1) {
+    return 'N=1は瞬間値の確認向けです。比較評価では最低でも複数回測定し、平均または中央値を使うことを推奨します。'
+  }
+
+  if (count < 10) {
+    return 'Nが少ないため、フェージングや人の移動によるばらつきが残りやすい条件です。簡易確認として扱います。'
+  }
+
+  if (count < 30) {
+    return '簡易な現場比較として使いやすいN数です。重要判断ではN=30以上、または複数地点での再測定を検討します。'
+  }
+
+  return '一般的な比較評価に使いやすいN数です。平均値に加えて標準偏差や外れ値も残すと、AI分析の精度が上がります。'
 }
 
 function parseCsvLine(line: string) {
@@ -1680,6 +1928,52 @@ function HelpChip({ label }: { label: keyof typeof HELP_TEXT }) {
   )
 }
 
+function ParameterGuidance({ stepId }: { stepId: InputStepId }) {
+  const guidance = PARAMETER_GUIDANCE[stepId]
+
+  return (
+    <section className="guidance-panel" aria-label={`${guidance.title}の解説`}>
+      <div className="guidance-heading">
+        <strong>入力目安と根拠</strong>
+        <span>{guidance.title}</span>
+      </div>
+      <div className="guidance-grid">
+        {guidance.items.map((item) => (
+          <details className="guidance-card" key={item.label}>
+            <summary>
+              <span>{item.label}</span>
+              <small>{item.guideline}</small>
+            </summary>
+            <p>{item.basis}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ResearchColumns() {
+  return (
+    <section className="column-section" aria-label="研究動向コラム">
+      <div className="subsection-heading">
+        <h3>短いコラム</h3>
+        <span>必要な項目だけ開いて確認</span>
+      </div>
+      <div className="column-list">
+        {RESEARCH_COLUMNS.map((column) => (
+          <details className="column-card" key={column.title}>
+            <summary>
+              <strong>{column.title}</strong>
+              <span>{column.summary}</span>
+            </summary>
+            <p>{column.body}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function buildMeasurementCsv(points: MeasurementPoint[]) {
   const escape = (value: string | number | null) => {
     if (value === null) {
@@ -1811,6 +2105,8 @@ function buildExperimentReport({
     `- 測定者: ${protocol.operatorName || '未入力'}`,
     `- 端末: ${protocol.deviceName || '未入力'}`,
     `- 測定高さ: ${formatMeters(protocol.measurementHeightM)}`,
+    `- 観測N数: N=${numberFormatter.format(protocol.observationCount)}`,
+    `- N数メモ: ${getObservationCountGuidance(protocol.observationCount)}`,
     `- 平均化時間: ${numberFormatter.format(protocol.averagingSeconds)} 秒`,
     `- サンプル数/点: ${numberFormatter.format(protocol.samplesPerPoint)}`,
     `- アンテナ/端末向き: ${protocol.antennaDirection || '未入力'}`,
@@ -1897,6 +2193,7 @@ function buildExperimentReport({
 
 function buildAiAnalysisText({
   settings,
+  protocol,
   scenarioResults,
   measuredComparisons,
   angleLossDb,
@@ -1908,6 +2205,7 @@ function buildAiAnalysisText({
   measuredNamigateGainDb,
 }: {
   settings: Settings
+  protocol: TestProtocol
   scenarioResults: ScenarioResult[]
   measuredComparisons: MeasuredComparison[]
   angleLossDb: number
@@ -1978,6 +2276,10 @@ function buildAiAnalysisText({
 	    `- 屋外3D距離: ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`,
 	    `- 室内水平距離: ${formatMeters(settings.indoorDistanceM)}`,
 	    `- 室内3D距離: ${formatMeters(calculateIndoorLinkDistanceM(settings))}`,
+	    `- 観測N数: N=${numberFormatter.format(protocol.observationCount)}`,
+	    `- N数メモ: ${getObservationCountGuidance(protocol.observationCount)}`,
+	    `- 平均化時間: ${numberFormatter.format(protocol.averagingSeconds)} 秒`,
+	    `- CSVサンプル数/点: ${numberFormatter.format(protocol.samplesPerPoint)}`,
 	    `- 地面反射補正: ${formatDb(settings.groundReflectionDb)}`,
 	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
 	    `- 窓種別: ${windowLabel}`,
@@ -2030,6 +2332,7 @@ function buildAiAnalysisText({
     '- 3状態に共通するオフセットがあるか',
     '- 窓ありだけ誤差が大きい場合、窓損失または入射角損失をどう補正すべきか',
     '- ナミゲートありだけ誤差が大きい場合、改善量または面積補正をどう見直すべきか',
+    '- 観測N数と平均化時間が、フェージングや人流によるばらつきを十分ならしているか',
   ].join('\n')
 }
 
@@ -3296,6 +3599,7 @@ function App() {
     () =>
       buildAiAnalysisText({
         settings,
+        protocol,
         scenarioResults,
         measuredComparisons,
         angleLossDb,
@@ -3308,6 +3612,7 @@ function App() {
       }),
     [
       settings,
+      protocol,
       scenarioResults,
       measuredComparisons,
       angleLossDb,
@@ -3652,7 +3957,14 @@ function App() {
     setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
     setMeasuredRsrpValues(savedCase.measuredRsrpValues)
     setMeasurementPoints(savedCase.measurementPoints)
-    setProtocol(savedCase.protocol)
+    setProtocol({
+      ...DEFAULT_PROTOCOL,
+      ...savedCase.protocol,
+      checklist: {
+        ...DEFAULT_PROTOCOL.checklist,
+        ...savedCase.protocol.checklist,
+      },
+    })
     setCaseName(savedCase.name)
     setCopyStatus('試験ケースを読み込みました')
   }
@@ -3731,6 +4043,7 @@ function App() {
                 <span key={text}>{text}</span>
               ))}
             </div>
+            <ParameterGuidance stepId="radio" />
             <label className="control">
               <TermLabel label="無線機プリセット" help={HELP_TEXT['無線機プリセット']} />
               <select
@@ -3943,6 +4256,7 @@ function App() {
                 <span key={text}>{text}</span>
               ))}
             </div>
+            <ParameterGuidance stepId="windowRoom" />
             <label className="control">
               <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
               <select
@@ -4085,6 +4399,7 @@ function App() {
                 <span key={text}>{text}</span>
               ))}
             </div>
+            <ParameterGuidance stepId="namigate" />
             <label className="control">
               <TermLabel label="改善量プリセット" help={HELP_TEXT['改善量プリセット']} />
               <select
@@ -4211,6 +4526,7 @@ function App() {
                 <span key={text}>{text}</span>
               ))}
             </div>
+            <ParameterGuidance stepId="measurement" />
             {SCENARIOS.map((scenario) => (
               <label className="control measurement-input" key={scenario.key}>
                 <span>実測RSRP（{scenario.label}）</span>
@@ -4228,6 +4544,10 @@ function App() {
                 </div>
               </label>
             ))}
+            <div className="model-note sample-note">
+              <strong>観測N数の考え方</strong>
+              <span>{getObservationCountGuidance(protocol.observationCount)}</span>
+            </div>
             <div className="protocol-mini-grid">
               <NumberInput
                 label="測定高さ"
@@ -4236,6 +4556,14 @@ function App() {
                 step={0.1}
                 unit="m"
                 onChange={(value) => updateProtocol('measurementHeightM', value)}
+              />
+              <NumberInput
+                label="観測N数"
+                value={protocol.observationCount}
+                min={1}
+                step={1}
+                onChange={(value) => updateProtocol('observationCount', value)}
+                help={HELP_TEXT['観測N数']}
               />
               <NumberInput
                 label="平均化時間"
@@ -4290,6 +4618,7 @@ function App() {
                 <span key={text}>{text}</span>
               ))}
             </div>
+            <ParameterGuidance stepId="review" />
             <div className="review-action-grid">
               <button type="button" onClick={() => setActiveView('overview')}>
                 概要を見る
@@ -4576,6 +4905,11 @@ function App() {
               </div>
 
               <div className="measurement-summary">
+                <article>
+                  <span>観測N数</span>
+                  <strong>N={numberFormatter.format(protocol.observationCount)}</strong>
+                  <small>{getObservationCountGuidance(protocol.observationCount)}</small>
+                </article>
                 <article>
                   <span>平均誤差</span>
                   <strong>{formatOptionalDb(measuredAverageResidualDb)}</strong>
@@ -4917,6 +5251,14 @@ function App() {
                     onChange={(value) => updateProtocol('measurementHeightM', value)}
                   />
                   <NumberInput
+                    label="観測N数"
+                    value={protocol.observationCount}
+                    min={1}
+                    step={1}
+                    onChange={(value) => updateProtocol('observationCount', value)}
+                    help={HELP_TEXT['観測N数']}
+                  />
+                  <NumberInput
                     label="平均化時間"
                     value={protocol.averagingSeconds}
                     min={1}
@@ -4950,6 +5292,10 @@ function App() {
                       placeholder="屋外天候/人流/遮蔽物"
                     />
                   </label>
+                </div>
+                <div className="model-note sample-note">
+                  <strong>N数メモ</strong>
+                  <span>{getObservationCountGuidance(protocol.observationCount)}</span>
                 </div>
                 <div className="checklist-grid">
                   {Object.entries(PROTOCOL_CHECKLIST_LABELS).map(([key, label]) => (
@@ -5253,6 +5599,8 @@ function App() {
                     </article>
                   </div>
                 </section>
+
+                <ResearchColumns />
 
                 <section className="evidence-grid" aria-label="参考資料">
                   {EVIDENCE_ITEMS.map((item) => (

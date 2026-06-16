@@ -42,6 +42,14 @@ type ActiveView =
   | 'evidence'
 type InputStepId = 'radio' | 'windowRoom' | 'namigate' | 'measurement' | 'review'
 type AppMode = 'sales' | 'technical'
+type SalesPresetId =
+  | 'custom'
+  | 'singleGlassNear'
+  | 'doubleGlassOffice'
+  | 'lowEStandard'
+  | 'lowESevere'
+  | 'mmwaveWindow'
+  | 'noNamigateCompare'
 type ModulePresetId =
   | 'custom'
   | 'sub6IndoorSmallCell'
@@ -284,6 +292,7 @@ type AutoSaveDraft = {
   version: 1
   savedAt: string
   appMode: AppMode
+  salesPresetId: SalesPresetId
   settings: Settings
   measuredRsrpValues: MeasuredRsrpValues
   theoryRsrpValues: TheoryRsrpValues
@@ -317,6 +326,176 @@ const DISPLAY_MODES: {
     id: 'technical',
     label: '技術詳細モード',
     description: '実測比較・校正向け',
+  },
+]
+
+const SALES_PRESETS: {
+  id: SalesPresetId
+  label: string
+  description: string
+  settings?: Partial<Settings>
+  measurementHeightM?: number
+}[] = [
+  {
+    id: 'custom',
+    label: '任意入力',
+    description: '現在の入力値をそのまま使います。個別に数値を調整する場合はこちらになります。',
+  },
+  {
+    id: 'singleGlassNear',
+    label: '通常ガラス・近距離',
+    description: '窓損失が小さい条件。効果説明よりも、通常ガラスでは影響が軽いケースを見せる用途です。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 50,
+      windowPresetId: 'single',
+      windowLossDb: 3,
+      incidentAngleDeg: 90,
+      roomWidthM: 8,
+      roomDepthM: 10,
+      indoorDistanceM: 5,
+      indoorPathLossExponent: 2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'standard',
+      namigateGainDb: 10,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'doubleGlassOffice',
+    label: '複層ガラス・標準オフィス',
+    description: '中程度の窓損失と室内奥行を想定。初回商談の標準比較に使いやすい条件です。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 100,
+      windowPresetId: 'double',
+      windowLossDb: 10,
+      incidentAngleDeg: 60,
+      roomWidthM: 8,
+      roomDepthM: 12,
+      indoorDistanceM: 8,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'standard',
+      namigateGainDb: 10,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'lowEStandard',
+    label: 'Low-E標準デモ',
+    description: '既定値に近い条件。窓損失とナミゲートによる回復率を説明しやすいプリセットです。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 100,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 60,
+      roomWidthM: 8,
+      roomDepthM: 12,
+      indoorDistanceM: 8,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'lowESevere',
+    label: 'Low-E厳しめ条件',
+    description: '距離が長く、角度も浅い条件。実証前のリスク説明や保守的な比較に使います。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 150,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 45,
+      roomWidthM: 10,
+      roomDepthM: 15,
+      indoorDistanceM: 10,
+      indoorPathLossExponent: 2.5,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'mmwaveWindow',
+    label: '28GHz窓面検討',
+    description: 'ミリ波帯の短距離窓面検討。周波数影響を見せたい展示・技術導入説明向けです。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 28200,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 30,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 60,
+      roomWidthM: 6,
+      roomDepthM: 8,
+      indoorDistanceM: 4,
+      indoorPathLossExponent: 2.4,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'noNamigateCompare',
+    label: 'Low-E・ナミゲートなし比較',
+    description: 'ナミゲート改善を0dBにした比較用。窓あり単体の厳しさを先に見せる用途です。',
+    measurementHeightM: 1.2,
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 100,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 60,
+      roomWidthM: 8,
+      roomDepthM: 12,
+      indoorDistanceM: 8,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'custom',
+      namigateGainDb: 0,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 0,
+      namigateMaxTotalGainDb: 0,
+    },
   },
 ]
 
@@ -2814,6 +2993,13 @@ function isAppMode(value: unknown): value is AppMode {
   )
 }
 
+function isSalesPresetId(value: unknown): value is SalesPresetId {
+  return (
+    typeof value === 'string' &&
+    SALES_PRESETS.some((preset) => preset.id === value)
+  )
+}
+
 function mergeMeasuredRsrpValues(
   values: Partial<MeasuredRsrpValues> | undefined,
 ): MeasuredRsrpValues {
@@ -4557,6 +4743,13 @@ function App() {
   const [appMode, setAppMode] = useState<AppMode>(() =>
     isAppMode(autoSaveDraft.appMode) ? autoSaveDraft.appMode : 'sales',
   )
+  const [salesPresetId, setSalesPresetId] = useState<SalesPresetId>(() =>
+    isSalesPresetId(autoSaveDraft.salesPresetId)
+      ? autoSaveDraft.salesPresetId
+      : autoSaveDraft.settings
+        ? 'custom'
+        : 'lowEStandard',
+  )
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...(autoSaveDraft.settings ?? {}),
@@ -4602,6 +4795,7 @@ function App() {
     value: Settings[K],
     options: { keepModulePreset?: boolean } = {},
   ) => {
+    setSalesPresetId('custom')
     setSettings((current) => ({
       ...current,
       modulePresetId:
@@ -4621,6 +4815,7 @@ function App() {
       return
     }
 
+    setSalesPresetId('custom')
     setSettings((current) => ({
       ...current,
       ...preset.settings,
@@ -4662,6 +4857,7 @@ function App() {
         version: 1,
         savedAt,
         appMode,
+        salesPresetId,
         settings,
         measuredRsrpValues,
         theoryRsrpValues,
@@ -4683,6 +4879,7 @@ function App() {
     return () => window.clearTimeout(timeoutId)
   }, [
     appMode,
+    salesPresetId,
     activeInputStep,
     activeView,
     caseName,
@@ -5330,6 +5527,13 @@ function App() {
     ],
   )
 
+  const selectedSalesPreset = useMemo(
+    () =>
+      SALES_PRESETS.find((preset) => preset.id === salesPresetId) ??
+      SALES_PRESETS[0],
+    [salesPresetId],
+  )
+
   const salesComment = useMemo(
     () =>
       buildSalesComment({
@@ -5390,6 +5594,7 @@ function App() {
 
   const handleWindowPresetChange = (presetId: WindowPresetId) => {
     const preset = WINDOW_PRESETS.find((item) => item.id === presetId)
+    setSalesPresetId('custom')
     setSettings((current) => ({
       ...current,
       windowPresetId: presetId,
@@ -5399,11 +5604,45 @@ function App() {
 
   const handleNamigatePresetChange = (presetId: NamigatePresetId) => {
     const preset = NAMIGATE_PRESETS.find((item) => item.id === presetId)
+    setSalesPresetId('custom')
     setSettings((current) => ({
       ...current,
       namigatePresetId: presetId,
       namigateGainDb: preset?.gainDb ?? current.namigateGainDb,
     }))
+  }
+
+  const handleSalesPresetChange = (presetId: SalesPresetId) => {
+    const preset = SALES_PRESETS.find((item) => item.id === presetId)
+
+    if (!preset) {
+      return
+    }
+
+    setSalesPresetId(presetId)
+
+    if (preset.settings) {
+      setSettings((current) => ({
+        ...current,
+        ...preset.settings,
+        modulePresetId: 'custom',
+      }))
+    }
+
+    const measurementHeightM = preset.measurementHeightM
+
+    if (measurementHeightM !== undefined) {
+      setProtocol((current) => ({
+        ...current,
+        measurementHeightM,
+      }))
+    }
+
+    setCopyStatus(
+      presetId === 'custom'
+        ? '任意入力に切り替えました'
+        : '営業用プリセットを反映しました',
+    )
   }
 
   const handleCopyAnalysis = async () => {
@@ -5491,6 +5730,7 @@ function App() {
   })
 
   const applySavedCase = (savedCase: SavedTestCase) => {
+    setSalesPresetId('custom')
     setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
     setMeasuredRsrpValues(mergeMeasuredRsrpValues(savedCase.measuredRsrpValues))
     setTheoryRsrpValues(mergeTheoryRsrpValues(savedCase.theoryRsrpValues))
@@ -5766,12 +6006,31 @@ function App() {
 
           <section className="sales-control-panel" aria-label="営業用簡易入力">
             <div className="sales-mode-note">
-              <strong>まずは8項目だけで概算</strong>
+              <strong>プリセットから始めて、必要な数値だけ調整</strong>
               <span>
-                詳細条件は現在値を使います。必要になったら技術詳細モードでEIRP、アンテナ利得、実測比較まで確認できます。
+                用途に近い条件を選ぶと主要入力値をまとめて反映します。詳細条件は現在値を使い、必要になったら技術詳細モードで確認できます。
               </span>
             </div>
             <div className="sales-control-grid">
+              <label className="control sales-preset-control">
+                <TermLabel
+                  label="営業用プリセット"
+                  help="商談・展示会でよく使う条件セットです。選択すると周波数、距離、窓種別、入射角、室内距離、ナミゲート改善量、測定高さをまとめて反映します。"
+                />
+                <select
+                  value={salesPresetId}
+                  onChange={(event) =>
+                    handleSalesPresetChange(event.target.value as SalesPresetId)
+                  }
+                >
+                  {SALES_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+                <small>{selectedSalesPreset.description}</small>
+              </label>
               <NumberInput
                 label="周波数"
                 value={settings.frequencyMHz}
@@ -5837,18 +6096,29 @@ function App() {
                   checked={settings.namigateGainDb > 0}
                   type="checkbox"
                   onChange={(event) => {
+                    setSalesPresetId('custom')
                     if (event.target.checked) {
                       setSettings((current) => ({
                         ...current,
                         namigatePresetId: 'standard',
                         namigateGainDb:
                           current.namigateGainDb > 0 ? current.namigateGainDb : 10,
+                        namigateAreaGainScale:
+                          current.namigateAreaGainScale > 0
+                            ? current.namigateAreaGainScale
+                            : 1,
+                        namigateMaxTotalGainDb:
+                          current.namigateMaxTotalGainDb > 0
+                            ? current.namigateMaxTotalGainDb
+                            : 40,
                       }))
                     } else {
                       setSettings((current) => ({
                         ...current,
                         namigatePresetId: 'custom',
                         namigateGainDb: 0,
+                        namigateAreaGainScale: 0,
+                        namigateMaxTotalGainDb: 0,
                       }))
                     }
                   }}

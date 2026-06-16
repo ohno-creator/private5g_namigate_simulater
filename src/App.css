@@ -687,6 +687,20 @@
   gap: 11px;
 }
 
+.sales-preset-control {
+  padding: 11px 12px;
+  border: 1px solid #c9d8e4;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.sales-preset-control small {
+  color: #5f6f7c;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
 .sales-toggle {
   min-height: 44px;
   padding: 9px 10px;

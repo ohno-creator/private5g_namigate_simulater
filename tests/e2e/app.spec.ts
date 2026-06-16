@@ -90,6 +90,7 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
   await expect(page.getByLabel('営業用結果サマリー')).toBeVisible()
   await expect(page.getByRole('button', { name: 'PDFレポート出力' })).toBeVisible()
   await expect(page.getByText('実測前の仮説整理ツール')).toBeVisible()
+  await expect(controlSelect(page, '営業用プリセット')).toHaveValue('lowEStandard')
 
   await expect(scenarioCard(page, '窓なし')).toBeVisible()
   await expect(scenarioCard(page, '窓あり')).toBeVisible()
@@ -190,6 +191,30 @@ test('営業用簡易モードからPDFレポート画面を開ける', async ({
   await expect(reportPage.getByText('免責・利用範囲')).toBeVisible()
   await expect(reportPage.getByText('RSRP、SINR、RSRQ')).toBeVisible()
   await reportPage.close()
+})
+
+test('営業用簡易モードで入力プリセットを選択できる', async ({ page }) => {
+  await page.goto('/')
+
+  const presetSelect = controlSelect(page, '営業用プリセット')
+  await presetSelect.selectOption('singleGlassNear')
+  await expect(presetSelect).toHaveValue('singleGlassNear')
+  await expect(controlInput(page, '屋外距離')).toHaveValue('50')
+  await expect(controlSelect(page, '窓種別')).toHaveValue('single')
+  await expect(controlInput(page, '窓損失')).toHaveValue('3')
+  await expect(controlInput(page, '入射角')).toHaveValue('90')
+  await expect(controlInput(page, '室内距離')).toHaveValue('5')
+  await expect(controlInput(page, 'ナミゲート改善量')).toHaveValue('10')
+  await expect(controlInput(page, '測定高さ')).toHaveValue('1.2')
+  await expect(page.getByText('通常ガラスでは影響が軽いケース')).toBeVisible()
+
+  await presetSelect.selectOption('noNamigateCompare')
+  await expect(controlInput(page, 'ナミゲート改善量')).toHaveValue('0')
+  const [, withWindow, withNamigate] = await rsrpValues(page)
+  expect(withNamigate).toBeCloseTo(withWindow, 1)
+
+  await controlInput(page, '室内距離').fill('6')
+  await expect(presetSelect).toHaveValue('custom')
 })
 
 test('入力変更でプリセット値と可視化ラベルが更新される', async ({ page }) => {

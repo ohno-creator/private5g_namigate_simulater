@@ -27,30 +27,45 @@ type WindowPresetId =
 type NamigatePresetId = 'conservative' | 'standard' | 'lowEExample' | 'custom'
 type EirpMode = 'direct' | 'detailed'
 type ScenarioKey = 'noWindow' | 'withWindow' | 'withNamigate'
+type ActiveView = 'overview' | 'measurement' | 'analysis' | 'visualization' | 'charts'
+type ModulePresetId =
+  | 'custom'
+  | 'sub6IndoorSmallCell'
+  | 'sub6OutdoorMicro'
+  | 'sub6CompactCpe'
+  | 'sub6ExternalAntennaModule'
+  | 'mmwaveEvaluation'
 
 type Settings = {
+  modulePresetId: ModulePresetId
   frequencyMHz: number
   eirpMode: EirpMode
   eirpDbm: number
   txPowerDbm: number
   txAntennaGainDbi: number
+  txAntennaHeightM: number
   txCableLossDb: number
   txOtherLossDb: number
   rxAntennaGainDbi: number
+  rxAntennaHeightM: number
   rxCableLossDb: number
   rxBodyLossDb: number
+  antennaAlignmentLossDb: number
   polarizationLossDb: number
   fadeMarginDb: number
   outdoorDistanceM: number
+  outdoorObstructionLossDb: number
   windowPresetId: WindowPresetId
   windowLossDb: number
   windowWidthM: number
   windowHeightM: number
+  windowCenterHeightM: number
   incidentAngleDeg: number
   roomWidthM: number
   roomDepthM: number
   indoorDistanceM: number
   indoorPathLossExponent: number
+  indoorObstacleLossDb: number
   groundReflectionDb: number
   namigatePresetId: NamigatePresetId
   namigateGainDb: number
@@ -73,6 +88,7 @@ type NumberInputProps = {
   max?: number
   step?: number
   unit?: string
+  help?: string
 }
 
 type ScenarioResult = {
@@ -94,6 +110,7 @@ type PositionDiagramProps = {
   settings: Settings
   angleLossDb: number
   areaGainDb: number
+  measurementPoints?: MeasurementPoint[]
 }
 
 type HeatmapCell = {
@@ -118,6 +135,91 @@ type HeatmapPlanProps = {
   settings: Settings
   scenario: ScenarioDefinition
   heatmap: HeatmapData
+  measurementPoints: MeasurementPoint[]
+}
+
+type MeasurementPoint = {
+  id: string
+  name: string
+  scenario: ScenarioKey
+  xM: number
+  yM: number
+  heightM: number
+  rsrpDbm: number
+  rsrqDb: number | null
+  sinrDb: number | null
+  dlMbps: number | null
+  ulMbps: number | null
+  timestamp: string
+  device: string
+  antennaDirection: string
+  note: string
+}
+
+type PointComparison = MeasurementPoint & {
+  estimatedRsrpDbm: number
+  residualDb: number
+  distanceM: number
+}
+
+type ErrorStats = {
+  count: number
+  meanResidualDb: number | null
+  maeDb: number | null
+  rmseDb: number | null
+  stddevDb: number | null
+  maxAbsDb: number | null
+}
+
+type QualityStats = {
+  pointCount: number
+  avgRsrqDb: number | null
+  avgSinrDb: number | null
+  avgDlMbps: number | null
+  avgUlMbps: number | null
+  connectedRatio: number | null
+}
+
+type CalibrationResult = {
+  source: string
+  pointCount: number
+  recommendedWindowLossDb: number
+  recommendedIndoorPathLossExponent: number
+  recommendedNamigateGainDb: number
+  recommendedTotalNamigateGainDb: number
+  beforeRmseDb: number | null
+  afterRmseDb: number | null
+}
+
+type ProtocolChecklistKey =
+  | 'sameDevice'
+  | 'sameHeight'
+  | 'fixedWindowPosition'
+  | 'sameAntennaDirection'
+  | 'averagedSamples'
+  | 'recordedEnvironment'
+
+type TestProtocol = {
+  siteName: string
+  operatorName: string
+  deviceName: string
+  measurementHeightM: number
+  averagingSeconds: number
+  samplesPerPoint: number
+  antennaDirection: string
+  weather: string
+  notes: string
+  checklist: Record<ProtocolChecklistKey, boolean>
+}
+
+type SavedTestCase = {
+  id: string
+  name: string
+  savedAt: string
+  settings: Settings
+  measuredRsrpValues: MeasuredRsrpValues
+  measurementPoints: MeasurementPoint[]
+  protocol: TestProtocol
 }
 
 const MAIN_COLOR = '#0071BD'
@@ -147,6 +249,148 @@ const NAMIGATE_PRESETS: {
   { id: 'custom', label: '任意', gainDb: null },
 ]
 
+const MODULE_PRESETS: {
+  id: ModulePresetId
+  label: string
+  description: string
+  settings: Partial<Settings>
+}[] = [
+  {
+    id: 'custom',
+    label: '任意',
+    description: '現在の入力値をそのまま使う',
+    settings: {},
+  },
+  {
+    id: 'sub6IndoorSmallCell',
+    label: '汎用Sub6 屋内小型基地局',
+    description: '屋内窓面評価の初期値。EIRPを控えめに扱う小型局想定',
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'detailed',
+      txPowerDbm: 24,
+      txAntennaGainDbi: 8,
+      txCableLossDb: 1,
+      txOtherLossDb: 1,
+      txAntennaHeightM: 3,
+      rxAntennaGainDbi: 0,
+      rxCableLossDb: 0,
+      rxBodyLossDb: 1,
+      rxAntennaHeightM: 1.2,
+      antennaAlignmentLossDb: 1,
+      fadeMarginDb: 3,
+      outdoorDistanceM: 60,
+    },
+  },
+  {
+    id: 'sub6OutdoorMicro',
+    label: '汎用Sub6 屋外マイクロ局',
+    description: '屋外から建物窓へ入射する検討向け。外部アンテナ局想定',
+    settings: {
+      frequencyMHz: 4850,
+      eirpMode: 'detailed',
+      txPowerDbm: 30,
+      txAntennaGainDbi: 15,
+      txCableLossDb: 1,
+      txOtherLossDb: 1,
+      txAntennaHeightM: 5,
+      rxAntennaGainDbi: 0,
+      rxCableLossDb: 0,
+      rxBodyLossDb: 0,
+      rxAntennaHeightM: 1.2,
+      antennaAlignmentLossDb: 0,
+      fadeMarginDb: 3,
+      outdoorDistanceM: 100,
+    },
+  },
+  {
+    id: 'sub6CompactCpe',
+    label: '汎用Sub6 CPE/固定端末',
+    description: '窓際受信機や固定CPEで外部アンテナ利得を見込む例',
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'detailed',
+      txPowerDbm: 26,
+      txAntennaGainDbi: 10,
+      txCableLossDb: 1,
+      txOtherLossDb: 1,
+      txAntennaHeightM: 4,
+      rxAntennaGainDbi: 6,
+      rxCableLossDb: 1,
+      rxBodyLossDb: 0,
+      rxAntennaHeightM: 1.5,
+      antennaAlignmentLossDb: 1,
+      fadeMarginDb: 3,
+      outdoorDistanceM: 100,
+    },
+  },
+  {
+    id: 'sub6ExternalAntennaModule',
+    label: '汎用Sub6 通信モジュール＋外部アンテナ',
+    description: '評価ボードや組込みモジュールに外部アンテナを接続する例',
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'detailed',
+      txPowerDbm: 23,
+      txAntennaGainDbi: 5,
+      txCableLossDb: 1,
+      txOtherLossDb: 1,
+      txAntennaHeightM: 2.5,
+      rxAntennaGainDbi: 3,
+      rxCableLossDb: 0.5,
+      rxBodyLossDb: 1,
+      rxAntennaHeightM: 1.2,
+      antennaAlignmentLossDb: 2,
+      fadeMarginDb: 4,
+      outdoorDistanceM: 50,
+    },
+  },
+  {
+    id: 'mmwaveEvaluation',
+    label: '汎用28GHz 評価構成',
+    description: 'ミリ波評価の入口。周波数依存の損失が大きい条件を確認',
+    settings: {
+      frequencyMHz: 28200,
+      eirpMode: 'detailed',
+      txPowerDbm: 20,
+      txAntennaGainDbi: 18,
+      txCableLossDb: 2,
+      txOtherLossDb: 2,
+      txAntennaHeightM: 3,
+      rxAntennaGainDbi: 10,
+      rxCableLossDb: 2,
+      rxBodyLossDb: 2,
+      rxAntennaHeightM: 1.2,
+      antennaAlignmentLossDb: 3,
+      fadeMarginDb: 8,
+      outdoorDistanceM: 30,
+      windowLossDb: 45,
+      incidentAngleDeg: 75,
+    },
+  },
+]
+
+const MODULE_PRESET_SETTING_KEYS = new Set<keyof Settings>([
+  'frequencyMHz',
+  'eirpMode',
+  'eirpDbm',
+  'txPowerDbm',
+  'txAntennaGainDbi',
+  'txAntennaHeightM',
+  'txCableLossDb',
+  'txOtherLossDb',
+  'rxAntennaGainDbi',
+  'rxAntennaHeightM',
+  'rxCableLossDb',
+  'rxBodyLossDb',
+  'antennaAlignmentLossDb',
+  'polarizationLossDb',
+  'fadeMarginDb',
+  'outdoorDistanceM',
+  'outdoorObstructionLossDb',
+  'groundReflectionDb',
+])
+
 const SCENARIOS: ScenarioDefinition[] = [
   { key: 'noWindow', label: '窓なし', color: '#15845d' },
   { key: 'withWindow', label: '窓あり', color: '#c96c34' },
@@ -165,30 +409,133 @@ const ANGLE_CHART_POINTS = [90, 60, 45, 30, 15]
 const AREA_CHART_SIZES_CM = [5, 10, 15, 20, 30, 40, 50, 60]
 const HEATMAP_COLUMNS = 18
 const HEATMAP_ROWS = 12
+const SAVED_CASES_STORAGE_KEY = 'private5g-namigate-saved-cases'
+
+const VIEW_TABS: {
+  id: ActiveView
+  label: string
+  description: string
+}[] = [
+  {
+    id: 'overview',
+    label: '概要',
+    description: '3状態の差と到達性を最初に確認',
+  },
+  {
+    id: 'measurement',
+    label: '実測データ',
+    description: '手入力やCSVから現場データを比較',
+  },
+  {
+    id: 'analysis',
+    label: '分析・校正',
+    description: '誤差、校正候補、レポートを作成',
+  },
+  {
+    id: 'visualization',
+    label: '可視化',
+    description: '位置関係と室内分布を確認',
+  },
+  {
+    id: 'charts',
+    label: 'グラフ',
+    description: '距離、角度、面積の傾向を確認',
+  },
+]
+
+const HELP_TEXT: Record<string, string> = {
+  RSRP:
+    '端末が受け取る5G基準信号の強さです。値が大きいほど受信しやすく、ここではしきい値以上を接続可能とします。',
+  SINR:
+    '信号と干渉・雑音の比です。RSRPが高くてもSINRが低いとスループットが伸びにくくなります。',
+  RSRQ:
+    '受信品質の指標です。電波の強さだけでは見えない混雑や干渉の影響を見る補助指標です。',
+  RMSE:
+    '推定と実測のズレを二乗平均平方根で表した値です。小さいほどモデルが現場に合っています。',
+  '無線機プリセット': '汎用的な基地局・通信モジュール構成の初期値です。メーカー仕様や免許条件を保証するものではありません。',
+  '周波数': '電波の周波数です。FSPL計算に使い、高い周波数ほど自由空間損失が大きくなります。',
+  'EIRP計算方式': 'EIRPを直接入れるか、送信出力やアンテナ利得から計算するかを選びます。',
+  'EIRP直接入力': '送信出力、アンテナ利得、給電損失をまとめた実効的な送信電力です。免許条件上のEIRP制限とは別に、正式判断は最新の総務省資料で確認してください。',
+  '送信出力': '無線機から出る空中線電力相当の入力値です。詳細EIRP計算方式のときに使い、法規制上は無線局免許・技術基準の確認対象になります。',
+  '送信アンテナ利得': '送信アンテナが特定方向へ電波を集中させる効果です。EIRPは概ね送信出力＋アンテナ利得−給電損失で大きくなります。',
+  '送信アンテナ高': '屋外側の送信アンテナ中心の地上高です。窓中心高との差から屋外の3D斜距離を計算します。',
+  '送信給電損失': '無線機からアンテナまでのケーブルなどで失われる量です。',
+  'その他送信損失': 'コネクタ、分配器、設置条件など送信側の追加損失です。',
+  '受信アンテナ利得': '受信側アンテナの利得です。端末内蔵アンテナなら0dBi付近から始めると扱いやすいです。',
+  '受信アンテナ高': '屋内側の代表受信点の高さです。窓中心高との差から室内の3D斜距離を計算します。',
+  '受信給電損失': '受信側のケーブルや接続部で失われる量です。',
+  '受信機内部損失': '端末筐体や人体保持など、受信系で見込む追加損失です。',
+  'アンテナ指向ずれ損失': '送受信アンテナの方位・チルト・ビーム方向が理想から外れる分を追加損失として見込みます。',
+  '偏波不整合損失': '送受信アンテナの偏波向きがずれることで発生する損失です。',
+  'フェージングマージン': '反射や人体遮蔽などのばらつきを保守的に見込む余裕です。',
+  '屋外距離': '送信機から窓面までの水平距離です。送信アンテナ高と窓中心高を加味してFSPL用の3D斜距離へ変換します。',
+  '屋外遮蔽損失': '屋外側の樹木、車両、仮設物、見通し悪化などを追加損失として見込む値です。',
+  '地面反射補正': '地面反射などで強め/弱めに見込む補正値です。まず0dBから始めます。',
+  '窓種別': '代表的な窓損失をプリセットから選べます。実測に合わせる場合は窓損失を直接変更します。',
+  '窓損失': '窓ガラスを通過するときに失われる量です。Low-Eや金属膜入りでは大きくなりやすいです。',
+  '窓幅': '窓の横幅です。図示とヒートマップの窓表示に使います。',
+  '窓高さ': '窓の高さです。3D図の窓サイズに使います。',
+  '窓中心高': '窓またはナミゲート中心の地上高です。送信・受信アンテナ高との差から3D距離を計算します。',
+  '入射角': '電波が窓へ入る角度です。90度が正面入射で、浅い角度ほど損失を大きく見込みます。',
+  '部屋幅': '窓に沿った横方向の部屋寸法です。接続可能面積の計算に使います。',
+  '部屋奥行': '窓から室内奥方向の部屋寸法です。ヒートマップ範囲と到達距離評価に使います。',
+  '室内距離': '窓から受信点までの水平距離です。受信アンテナ高と窓中心高を加味して室内3D距離へ変換します。',
+  '屋内伝搬指数': '室内で距離が伸びたときの減衰の強さです。大きいほど奥まで届きにくくなります。',
+  '屋内遮蔽損失': '什器、壁、人体、パーティションなど室内側で一律に見込む追加損失です。',
+  '改善量プリセット': 'ナミゲート改善量の仮定値を選びます。実測に合わせる場合は改善量を直接変更します。',
+  'ナミゲート改善量': 'ナミゲートで窓あり状態から上積みする改善量の仮定値です。',
+  'サイズ幅': 'ナミゲートの幅です。面積補正と図示に使います。',
+  'サイズ高さ': 'ナミゲートの高さです。面積補正と図示に使います。',
+  '面積補正係数': 'ナミゲート面積による改善量の効き具合を調整します。',
+  '面積補正上限': '面積補正が大きくなりすぎないようにする上限です。',
+  '入射角回復率': '入射角損失のうち、ナミゲートがどれだけ回復できると仮定するかです。',
+  '設置効率': '理想的な改善量に対して、実際の設置で得られる割合です。',
+  '追加損失': '取り付け状態や位置ずれなどで差し引く損失です。',
+  '最大総改善量': 'ナミゲートによる総改善量の上限です。',
+  '接続しきい値': 'このRSRP以上なら接続可能とみなす判定基準です。',
+  '測定高さ': '実測時の端末またはアンテナ高さです。比較時は高さを固定すると誤差を読みやすくなります。',
+  '平均化時間': '1点あたり何秒測って平均するかです。短すぎると瞬間的なフェージングの影響が残ります。',
+  'サンプル数/点': '1つの測定点で記録するサンプル数です。ばらつき確認に使います。',
+}
+
+const SAMPLE_MEASUREMENT_CSV = [
+  'point,scenario,x_m,y_m,height_m,rsrp_dbm,rsrq_db,sinr_db,dl_mbps,ul_mbps,timestamp,device,antenna_direction,note',
+  'P1,noWindow,4,2,1.2,-65,-9,18,280,42,2026-06-16T10:00:00,UE-A,窓向き,窓なし基準',
+  'P1,withWindow,4,2,1.2,-106,-14,4,18,3,2026-06-16T10:05:00,UE-A,窓向き,Low-E越し',
+  'P1,withNamigate,4,2,1.2,-80,-10,15,190,28,2026-06-16T10:10:00,UE-A,窓向き,ナミゲート中央',
+  'P2,withNamigate,4,8,1.2,-91,-11,11,92,17,2026-06-16T10:15:00,UE-A,窓向き,室内奥側',
+].join('\n')
 
 const DEFAULT_SETTINGS: Settings = {
+  modulePresetId: 'custom',
   frequencyMHz: 4700,
   eirpMode: 'direct',
   eirpDbm: 43,
   txPowerDbm: 30,
   txAntennaGainDbi: 15,
+  txAntennaHeightM: 5,
   txCableLossDb: 1,
   txOtherLossDb: 1,
   rxAntennaGainDbi: 0,
+  rxAntennaHeightM: 1.2,
   rxCableLossDb: 0,
   rxBodyLossDb: 0,
+  antennaAlignmentLossDb: 0,
   polarizationLossDb: 0,
   fadeMarginDb: 0,
   outdoorDistanceM: 100,
+  outdoorObstructionLossDb: 0,
   windowPresetId: 'lowE',
   windowLossDb: 40,
   windowWidthM: 2.4,
   windowHeightM: 1.8,
+  windowCenterHeightM: 1.6,
   incidentAngleDeg: 60,
   roomWidthM: 8,
   roomDepthM: 12,
   indoorDistanceM: 8,
   indoorPathLossExponent: 2.2,
+  indoorObstacleLossDb: 0,
   groundReflectionDb: 0,
   namigatePresetId: 'lowEExample',
   namigateGainDb: 25,
@@ -207,6 +554,35 @@ const DEFAULT_MEASURED_RSRP: MeasuredRsrpValues = {
   noWindow: '',
   withWindow: '',
   withNamigate: '',
+}
+
+const DEFAULT_PROTOCOL: TestProtocol = {
+  siteName: '',
+  operatorName: '',
+  deviceName: '',
+  measurementHeightM: 1.2,
+  averagingSeconds: 30,
+  samplesPerPoint: 10,
+  antennaDirection: '窓面へ正対',
+  weather: '',
+  notes: '',
+  checklist: {
+    sameDevice: false,
+    sameHeight: false,
+    fixedWindowPosition: false,
+    sameAntennaDirection: false,
+    averagedSamples: false,
+    recordedEnvironment: false,
+  },
+}
+
+const PROTOCOL_CHECKLIST_LABELS: Record<ProtocolChecklistKey, string> = {
+  sameDevice: '同一端末・同一SIMで測定',
+  sameHeight: '測定高さを固定',
+  fixedWindowPosition: '窓・ナミゲート位置を記録',
+  sameAntennaDirection: '端末/アンテナ向きを固定',
+  averagedSamples: '複数サンプルを平均化',
+  recordedEnvironment: '天候・人流・遮蔽物を記録',
 }
 
 const numberFormatter = new Intl.NumberFormat('ja-JP', {
@@ -234,6 +610,178 @@ function isValidNumberInput(value: string) {
   return value.trim() !== '' && Number.isFinite(Number(value))
 }
 
+function parseCsvLine(line: string) {
+  const values: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]
+    const nextCharacter = line[index + 1]
+
+    if (character === '"' && nextCharacter === '"') {
+      current += '"'
+      index += 1
+      continue
+    }
+
+    if (character === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (character === ',' && !inQuotes) {
+      values.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += character
+  }
+
+  values.push(current.trim())
+  return values
+}
+
+function normalizeHeader(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[()[\]{}]/g, '')
+    .replace(/_/g, '')
+}
+
+function getCsvValue(
+  row: Record<string, string>,
+  names: string[],
+  fallback = '',
+) {
+  for (const name of names) {
+    const normalizedName = normalizeHeader(name)
+    if (row[normalizedName] !== undefined && row[normalizedName] !== '') {
+      return row[normalizedName]
+    }
+  }
+
+  return fallback
+}
+
+function parseCsvNumber(
+  row: Record<string, string>,
+  names: string[],
+  fallback: number | null = null,
+) {
+  const value = getCsvValue(row, names)
+  const parsed = Number(value)
+  return value !== '' && Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizeScenario(value: string): ScenarioKey {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[+＋\s_-]/g, '')
+
+  if (
+    normalized.includes('namigate') ||
+    normalized.includes('withnamigate') ||
+    normalized.includes('ナミゲート')
+  ) {
+    return 'withNamigate'
+  }
+
+  if (
+    normalized.includes('withwindow') ||
+    normalized.includes('window') ||
+    normalized.includes('窓あり') ||
+    normalized.includes('窓有')
+  ) {
+    return 'withWindow'
+  }
+
+  return 'noWindow'
+}
+
+function parseMeasurementCsv(text: string): MeasurementPoint[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+
+  if (lines.length < 2) {
+    return []
+  }
+
+  const headers = parseCsvLine(lines[0]).map(normalizeHeader)
+
+  return lines
+    .slice(1)
+    .map((line, index) => {
+      const values = parseCsvLine(line)
+      const row = headers.reduce<Record<string, string>>((accumulator, header, column) => {
+        accumulator[header] = values[column] ?? ''
+        return accumulator
+      }, {})
+      const scenario = normalizeScenario(
+        getCsvValue(row, ['scenario', 'condition', '状態', '条件'], 'noWindow'),
+      )
+      const xM = parseCsvNumber(row, ['x_m', 'xm', 'x', 'x[m]', '横位置m'], 0)
+      const yM = parseCsvNumber(
+        row,
+        ['y_m', 'ym', 'y', 'y[m]', 'depth_m', '室内距離m', '奥行m'],
+        1,
+      )
+      const heightM = parseCsvNumber(
+        row,
+        ['height_m', 'heightm', 'height', 'h_m', '測定高さm', '高さm'],
+        DEFAULT_PROTOCOL.measurementHeightM,
+      )
+      const rsrpDbm = parseCsvNumber(
+        row,
+        ['rsrp_dbm', 'rsrpdbm', 'rsrp', 'rsrp[dBm]', 'RSRP'],
+        null,
+      )
+
+      if (rsrpDbm === null || xM === null || yM === null || heightM === null) {
+        return null
+      }
+
+      return {
+        id: `${Date.now()}-${index}`,
+        name:
+          getCsvValue(row, ['point', 'name', '測定点', 'point_name'], '') ||
+          `P${index + 1}`,
+        scenario,
+        xM,
+        yM,
+        heightM,
+        rsrpDbm,
+        rsrqDb: parseCsvNumber(row, ['rsrq_db', 'rsrqdb', 'rsrq'], null),
+        sinrDb: parseCsvNumber(row, ['sinr_db', 'sinrdb', 'sinr'], null),
+        dlMbps: parseCsvNumber(
+          row,
+          ['dl_mbps', 'dlmbps', 'downlink_mbps', 'download', 'dl'],
+          null,
+        ),
+        ulMbps: parseCsvNumber(
+          row,
+          ['ul_mbps', 'ulmbps', 'uplink_mbps', 'upload', 'ul'],
+          null,
+        ),
+        timestamp: getCsvValue(row, ['timestamp', 'time', 'datetime', '時刻'], ''),
+        device: getCsvValue(row, ['device', 'ue', 'terminal', '端末'], ''),
+        antennaDirection: getCsvValue(
+          row,
+          ['antenna_direction', 'antenna', 'direction', 'アンテナ向き'],
+          '',
+        ),
+        note: getCsvValue(row, ['note', 'memo', '備考', 'メモ'], ''),
+      }
+    })
+    .filter((point): point is MeasurementPoint => point !== null)
+}
+
 function log10(value: number) {
   return Math.log10(Math.max(value, 0.000001))
 }
@@ -242,6 +790,30 @@ function calculateFsplDb(frequencyMHz: number, distanceM: number) {
   const safeFrequencyMHz = Math.max(frequencyMHz, 1)
   const safeDistanceKm = Math.max(distanceM, 1) / 1000
   return 32.44 + 20 * log10(safeFrequencyMHz) + 20 * log10(safeDistanceKm)
+}
+
+function calculateOutdoorLinkDistanceM(settings: Settings) {
+  return Math.max(
+    Math.hypot(
+      Math.max(settings.outdoorDistanceM, 1),
+      settings.txAntennaHeightM - settings.windowCenterHeightM,
+    ),
+    1,
+  )
+}
+
+function calculateIndoorLinkDistanceM(
+  settings: Settings,
+  horizontalDistanceM = settings.indoorDistanceM,
+  receiverHeightM = settings.rxAntennaHeightM,
+) {
+  return Math.max(
+    Math.hypot(
+      Math.max(horizontalDistanceM, 0),
+      receiverHeightM - settings.windowCenterHeightM,
+    ),
+    1,
+  )
 }
 
 function calculateIndoorLossDb(distanceM: number, exponent: number) {
@@ -297,6 +869,7 @@ function calculateReceiverAdjustmentDb(settings: Settings) {
     settings.rxAntennaGainDbi -
     settings.rxCableLossDb -
     settings.rxBodyLossDb -
+    settings.antennaAlignmentLossDb -
     settings.polarizationLossDb -
     settings.fadeMarginDb
   )
@@ -370,10 +943,14 @@ function calculateRsrpDbm(
   settings: Settings,
   scenario: ScenarioKey,
   indoorDistanceM = settings.indoorDistanceM,
+  receiverHeightM = settings.rxAntennaHeightM,
 ) {
-  const fsplDb = calculateFsplDb(settings.frequencyMHz, settings.outdoorDistanceM)
+  const fsplDb = calculateFsplDb(
+    settings.frequencyMHz,
+    calculateOutdoorLinkDistanceM(settings),
+  )
   const indoorLossDb = calculateIndoorLossDb(
-    indoorDistanceM,
+    calculateIndoorLinkDistanceM(settings, indoorDistanceM, receiverHeightM),
     settings.indoorPathLossExponent,
   )
 
@@ -381,19 +958,26 @@ function calculateRsrpDbm(
     calculateEffectiveEirpDbm(settings) +
     calculateReceiverAdjustmentDb(settings) +
     settings.groundReflectionDb -
+    settings.outdoorObstructionLossDb -
     fsplDb -
     indoorLossDb +
+    - settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
   )
 }
 
 function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
-  const fsplDb = calculateFsplDb(settings.frequencyMHz, settings.outdoorDistanceM)
+  const fsplDb = calculateFsplDb(
+    settings.frequencyMHz,
+    calculateOutdoorLinkDistanceM(settings),
+  )
   const beforeIndoorLossDb =
     calculateEffectiveEirpDbm(settings) +
     calculateReceiverAdjustmentDb(settings) +
     settings.groundReflectionDb -
+    settings.outdoorObstructionLossDb -
     fsplDb +
+    - settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
 
   if (beforeIndoorLossDb < settings.connectionThresholdDbm) {
@@ -401,7 +985,17 @@ function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
   }
 
   const exponent = Math.max(settings.indoorPathLossExponent, 0.1)
-  return Math.pow(10, (beforeIndoorLossDb - settings.connectionThresholdDbm) / (10 * exponent))
+  const maxLinkDistanceM = Math.pow(
+    10,
+    (beforeIndoorLossDb - settings.connectionThresholdDbm) / (10 * exponent),
+  )
+  const heightDeltaM = Math.abs(settings.rxAntennaHeightM - settings.windowCenterHeightM)
+
+  if (maxLinkDistanceM <= heightDeltaM) {
+    return 0
+  }
+
+  return Math.sqrt(maxLinkDistanceM * maxLinkDistanceM - heightDeltaM * heightDeltaM)
 }
 
 function getIndoorPointDistanceM(
@@ -443,6 +1037,241 @@ function buildHeatmap(settings: Settings, scenario: ScenarioKey): HeatmapData {
   return {
     cells,
     connectedAreaM2: connectedCells * cellAreaM2,
+  }
+}
+
+function getMeasurementPointDistanceM(settings: Settings, point: MeasurementPoint) {
+  const windowCenterX = Math.max(settings.roomWidthM, 1) / 2
+  return Math.max(Math.hypot(point.xM - windowCenterX, point.yM), 1)
+}
+
+function buildPointComparisons(
+  settings: Settings,
+  points: MeasurementPoint[],
+): PointComparison[] {
+  return points.map((point) => {
+    const horizontalDistanceM = getMeasurementPointDistanceM(settings, point)
+    const distanceM = calculateIndoorLinkDistanceM(
+      settings,
+      horizontalDistanceM,
+      point.heightM,
+    )
+    const estimatedRsrpDbm = calculateRsrpDbm(
+      settings,
+      point.scenario,
+      horizontalDistanceM,
+      point.heightM,
+    )
+
+    return {
+      ...point,
+      distanceM,
+      estimatedRsrpDbm,
+      residualDb: point.rsrpDbm - estimatedRsrpDbm,
+    }
+  })
+}
+
+function calculateErrorStats(residuals: number[]): ErrorStats {
+  if (residuals.length === 0) {
+    return {
+      count: 0,
+      meanResidualDb: null,
+      maeDb: null,
+      rmseDb: null,
+      stddevDb: null,
+      maxAbsDb: null,
+    }
+  }
+
+  const meanResidualDb =
+    residuals.reduce((sum, value) => sum + value, 0) / residuals.length
+  const maeDb =
+    residuals.reduce((sum, value) => sum + Math.abs(value), 0) / residuals.length
+  const rmseDb = Math.sqrt(
+    residuals.reduce((sum, value) => sum + value * value, 0) / residuals.length,
+  )
+  const stddevDb = Math.sqrt(
+    residuals.reduce(
+      (sum, value) => sum + Math.pow(value - meanResidualDb, 2),
+      0,
+    ) / residuals.length,
+  )
+  const maxAbsDb = Math.max(...residuals.map((value) => Math.abs(value)))
+
+  return {
+    count: residuals.length,
+    meanResidualDb,
+    maeDb,
+    rmseDb,
+    stddevDb,
+    maxAbsDb,
+  }
+}
+
+function averageNullable(values: Array<number | null>) {
+  const numbers = values.filter((value): value is number => value !== null)
+
+  if (numbers.length === 0) {
+    return null
+  }
+
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length
+}
+
+function calculateQualityStats(
+  points: MeasurementPoint[],
+  thresholdDbm: number,
+): QualityStats {
+  if (points.length === 0) {
+    return {
+      pointCount: 0,
+      avgRsrqDb: null,
+      avgSinrDb: null,
+      avgDlMbps: null,
+      avgUlMbps: null,
+      connectedRatio: null,
+    }
+  }
+
+  const connectedCount = points.filter((point) => point.rsrpDbm >= thresholdDbm).length
+
+  return {
+    pointCount: points.length,
+    avgRsrqDb: averageNullable(points.map((point) => point.rsrqDb)),
+    avgSinrDb: averageNullable(points.map((point) => point.sinrDb)),
+    avgDlMbps: averageNullable(points.map((point) => point.dlMbps)),
+    avgUlMbps: averageNullable(points.map((point) => point.ulMbps)),
+    connectedRatio: (connectedCount / points.length) * 100,
+  }
+}
+
+function calculateCalibrationResult(
+  settings: Settings,
+  points: MeasurementPoint[],
+  measuredComparisons: MeasuredComparison[],
+): CalibrationResult {
+  const beforeStats = calculateErrorStats(
+    buildPointComparisons(settings, points).map((comparison) => comparison.residualDb),
+  )
+  const noWindowPoints = points.filter((point) => point.scenario === 'noWindow')
+  let recommendedIndoorPathLossExponent = settings.indoorPathLossExponent
+
+  if (noWindowPoints.length >= 2) {
+    let bestRmse = Number.POSITIVE_INFINITY
+
+    for (let exponent = 0.8; exponent <= 4.01; exponent += 0.05) {
+      const candidateSettings = {
+        ...settings,
+        indoorPathLossExponent: exponent,
+      }
+      const residuals = buildPointComparisons(candidateSettings, noWindowPoints).map(
+        (comparison) => comparison.residualDb,
+      )
+      const rmseDb = calculateErrorStats(residuals).rmseDb ?? Number.POSITIVE_INFINITY
+
+      if (rmseDb < bestRmse) {
+        bestRmse = rmseDb
+        recommendedIndoorPathLossExponent = exponent
+      }
+    }
+  }
+
+  const exponentSettings = {
+    ...settings,
+    indoorPathLossExponent: recommendedIndoorPathLossExponent,
+  }
+  const withWindowPoints = points.filter((point) => point.scenario === 'withWindow')
+  const angleLossDb = getEffectiveAngleLossDb(settings)
+  const windowLossCandidates = withWindowPoints.map((point) => {
+    const noWindowEstimate = calculateRsrpDbm(
+      exponentSettings,
+      'noWindow',
+      getMeasurementPointDistanceM(settings, point),
+      point.heightM,
+    )
+    return noWindowEstimate - point.rsrpDbm - angleLossDb
+  })
+  const manualWindowLossCandidate =
+    measuredComparisons[0].measuredRsrpDbm !== null &&
+    measuredComparisons[1].measuredRsrpDbm !== null
+      ? measuredComparisons[0].measuredRsrpDbm -
+        measuredComparisons[1].measuredRsrpDbm -
+        angleLossDb
+      : null
+  const recommendedWindowLossDb = clamp(
+    averageNullable([
+      ...windowLossCandidates,
+      manualWindowLossCandidate,
+    ]) ?? settings.windowLossDb,
+    0,
+    80,
+  )
+  const windowCalibratedSettings = {
+    ...exponentSettings,
+    windowPresetId: 'custom' as WindowPresetId,
+    windowLossDb: recommendedWindowLossDb,
+  }
+  const withNamigatePoints = points.filter((point) => point.scenario === 'withNamigate')
+  const totalGainCandidates = withNamigatePoints.map((point) => {
+    const withWindowEstimate = calculateRsrpDbm(
+      windowCalibratedSettings,
+      'withWindow',
+      getMeasurementPointDistanceM(settings, point),
+      point.heightM,
+    )
+    return point.rsrpDbm - withWindowEstimate
+  })
+  const manualNamigateGainCandidate =
+    measuredComparisons[1].measuredRsrpDbm !== null &&
+    measuredComparisons[2].measuredRsrpDbm !== null
+      ? measuredComparisons[2].measuredRsrpDbm -
+        measuredComparisons[1].measuredRsrpDbm
+      : null
+  const recommendedTotalNamigateGainDb = clamp(
+    averageNullable([
+      ...totalGainCandidates,
+      manualNamigateGainCandidate,
+    ]) ?? calculateNamigateTotalGainDb(settings),
+    0,
+    Math.max(settings.namigateMaxTotalGainDb, 0),
+  )
+  const efficiency = Math.max(settings.namigateInstallationEfficiencyPercent, 0.001) / 100
+  const recommendedNamigateGainDb = clamp(
+    recommendedTotalNamigateGainDb / efficiency +
+      settings.namigateAdditionalLossDb -
+      calculateAreaGainDb(settings) -
+      calculateNamigateAngleRecoveryDb(settings),
+    0,
+    Math.max(settings.namigateMaxTotalGainDb, 0),
+  )
+  const afterSettings = {
+    ...windowCalibratedSettings,
+    namigatePresetId: 'custom' as NamigatePresetId,
+    namigateGainDb: recommendedNamigateGainDb,
+  }
+  const afterStats = calculateErrorStats(
+    buildPointComparisons(afterSettings, points).map((comparison) => comparison.residualDb),
+  )
+  const pointCount = points.length
+  const hasManualValues = measuredComparisons.some(
+    (comparison) => comparison.measuredRsrpDbm !== null,
+  )
+
+  return {
+    source:
+      pointCount > 0
+        ? 'CSV実測点'
+        : hasManualValues
+          ? '3状態の手入力値'
+          : '未入力',
+    pointCount,
+    recommendedWindowLossDb,
+    recommendedIndoorPathLossExponent,
+    recommendedNamigateGainDb,
+    recommendedTotalNamigateGainDb,
+    beforeRmseDb: beforeStats.rmseDb,
+    afterRmseDb: afterStats.rmseDb,
   }
 }
 
@@ -495,12 +1324,24 @@ function formatArea(value: number) {
   return `${numberFormatter.format(value)} m²`
 }
 
+function formatOptionalMbps(value: number | null) {
+  return value === null ? '未入力' : `${numberFormatter.format(value)} Mbps`
+}
+
+function formatOptionalPercent(value: number | null) {
+  return value === null ? '未入力' : `${numberFormatter.format(value)}%`
+}
+
 function formatMultiplier(value: number) {
   if (value >= 1000) {
     return `${compactNumberFormatter.format(value)}倍`
   }
 
   return `${numberFormatter.format(value)}倍`
+}
+
+function getModulePresetLabel(id: ModulePresetId) {
+  return MODULE_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
 }
 
 function describeResidual(residualDb: number | null) {
@@ -513,6 +1354,247 @@ function describeResidual(residualDb: number | null) {
   }
 
   return residualDb > 0 ? '実測が高い' : '実測が低い'
+}
+
+function HelpTip({ text }: { text: string }) {
+  return (
+    <span className="help-tip" tabIndex={0} aria-label={text}>
+      <span aria-hidden="true">?</span>
+      <span className="help-bubble" role="tooltip">
+        {text}
+      </span>
+    </span>
+  )
+}
+
+function TermLabel({ label, help }: { label: string; help?: string }) {
+  return (
+    <span className="field-label">
+      {label}
+      {help ? <HelpTip text={help} /> : null}
+    </span>
+  )
+}
+
+function HelpChip({ label }: { label: keyof typeof HELP_TEXT }) {
+  return (
+    <span className="help-chip">
+      {label}
+      <HelpTip text={HELP_TEXT[label]} />
+    </span>
+  )
+}
+
+function buildMeasurementCsv(points: MeasurementPoint[]) {
+  const escape = (value: string | number | null) => {
+    if (value === null) {
+      return ''
+    }
+
+    const text = String(value)
+    return text.includes(',') || text.includes('"') || text.includes('\n')
+      ? `"${text.replace(/"/g, '""')}"`
+      : text
+  }
+
+  return [
+    'point,scenario,x_m,y_m,height_m,rsrp_dbm,rsrq_db,sinr_db,dl_mbps,ul_mbps,timestamp,device,antenna_direction,note',
+    ...points.map((point) =>
+      [
+        point.name,
+        point.scenario,
+        point.xM,
+        point.yM,
+        point.heightM,
+        point.rsrpDbm,
+        point.rsrqDb,
+        point.sinrDb,
+        point.dlMbps,
+        point.ulMbps,
+        point.timestamp,
+        point.device,
+        point.antennaDirection,
+        point.note,
+      ]
+        .map(escape)
+        .join(','),
+    ),
+  ].join('\n')
+}
+
+function downloadTextFile(filename: string, text: string, mimeType = 'text/plain') {
+  const blob = new Blob([text], { type: `${mimeType};charset=utf-8` })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function loadSavedTestCases(): SavedTestCase[] {
+  try {
+    const raw = localStorage.getItem(SAVED_CASES_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as SavedTestCase[]) : []
+  } catch {
+    return []
+  }
+}
+
+function persistSavedTestCases(cases: SavedTestCase[]) {
+  localStorage.setItem(SAVED_CASES_STORAGE_KEY, JSON.stringify(cases))
+}
+
+function buildExperimentReport({
+  settings,
+  protocol,
+  scenarioResults,
+  pointComparisons,
+  errorStats,
+  qualityStats,
+  calibration,
+  sensitivityRows,
+  confidenceRows,
+}: {
+  settings: Settings
+  protocol: TestProtocol
+  scenarioResults: ScenarioResult[]
+  pointComparisons: PointComparison[]
+  errorStats: ErrorStats
+  qualityStats: QualityStats
+  calibration: CalibrationResult
+  sensitivityRows: Array<{
+    label: string
+    rsrpDbm: number
+    connectedAreaM2: number
+    maxReachM: number
+    deltaRsrpDb: number
+  }>
+  confidenceRows: Array<{
+    label: string
+    rsrpDbm: number
+    connectedAreaM2: number
+    maxReachM: number
+  }>
+}) {
+  const pointRows = pointComparisons
+    .map(
+      (point) =>
+	        `| ${point.name} | ${
+	          SCENARIOS.find((scenario) => scenario.key === point.scenario)?.label
+	        } | ${numberFormatter.format(point.xM)} | ${numberFormatter.format(
+	          point.yM,
+	        )} | ${formatMeters(point.heightM)} | ${formatMeters(point.distanceM)} | ${formatDbm(point.rsrpDbm)} | ${formatDbm(
+	          point.estimatedRsrpDbm,
+	        )} | ${formatDb(point.residualDb)} | ${formatOptionalDb(
+	          point.sinrDb,
+        )} | ${formatOptionalMbps(point.dlMbps)} |`,
+    )
+    .join('\n')
+  const sensitivityRowsText = sensitivityRows
+    .map(
+      (row) =>
+        `| ${row.label} | ${formatDbm(row.rsrpDbm)} | ${formatDb(
+          row.deltaRsrpDb,
+        )} | ${formatArea(row.connectedAreaM2)} | ${formatMeters(row.maxReachM)} |`,
+    )
+    .join('\n')
+  const confidenceRowsText = confidenceRows
+    .map(
+      (row) =>
+        `| ${row.label} | ${formatDbm(row.rsrpDbm)} | ${formatArea(
+          row.connectedAreaM2,
+        )} | ${formatMeters(row.maxReachM)} |`,
+    )
+    .join('\n')
+
+  return [
+    '# ローカル5G 窓面電波改善 実証試験レポート',
+    '',
+    '## 試験条件',
+    `- 試験場所: ${protocol.siteName || '未入力'}`,
+    `- 測定者: ${protocol.operatorName || '未入力'}`,
+    `- 端末: ${protocol.deviceName || '未入力'}`,
+    `- 測定高さ: ${formatMeters(protocol.measurementHeightM)}`,
+    `- 平均化時間: ${numberFormatter.format(protocol.averagingSeconds)} 秒`,
+    `- サンプル数/点: ${numberFormatter.format(protocol.samplesPerPoint)}`,
+    `- アンテナ/端末向き: ${protocol.antennaDirection || '未入力'}`,
+    `- 天候・環境: ${protocol.weather || '未入力'}`,
+    '',
+	    '## 入力モデル',
+	    `- 無線機プリセット: ${getModulePresetLabel(settings.modulePresetId)}`,
+	    `- 周波数: ${numberFormatter.format(settings.frequencyMHz)} MHz`,
+	    `- 実効EIRP: ${formatDbm(calculateEffectiveEirpDbm(settings))}`,
+	    `- 屋外水平距離: ${formatMeters(settings.outdoorDistanceM)}`,
+	    `- 屋外3D距離: ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`,
+	    `- 送信アンテナ高: ${formatMeters(settings.txAntennaHeightM)}`,
+	    `- 窓中心高: ${formatMeters(settings.windowCenterHeightM)}`,
+	    `- 受信アンテナ高: ${formatMeters(settings.rxAntennaHeightM)}`,
+	    `- アンテナ指向ずれ損失: ${formatDb(settings.antennaAlignmentLossDb)}`,
+	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
+	    `- 屋内遮蔽損失: ${formatDb(settings.indoorObstacleLossDb)}`,
+	    `- 窓損失: ${formatDb(settings.windowLossDb)}`,
+	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)}°`,
+	    `- 屋内伝搬指数: ${numberFormatter.format(settings.indoorPathLossExponent)}`,
+	    `- ナミゲート総改善量: ${formatDb(calculateNamigateTotalGainDb(settings))}`,
+	    `- 法規制メモ: 本ツールはEIRP等の法令上限適合を判定しません。最新の総務省ガイドライン、免許条件、管轄総合通信局の確認が必要です。`,
+    '',
+    '## 3状態推定',
+    '| 状態 | RSRP | 接続可能面積 | 最大到達距離 |',
+    '| --- | ---: | ---: | ---: |',
+    ...scenarioResults.map(
+      (scenario) =>
+        `| ${scenario.label} | ${formatDbm(scenario.rsrpDbm)} | ${formatArea(
+          scenario.connectedAreaM2,
+        )} | ${formatMeters(scenario.maxReachM)} |`,
+    ),
+    '',
+    '## 実測点誤差',
+    `- 実測点数: ${numberFormatter.format(errorStats.count)}`,
+    `- 平均誤差: ${formatOptionalDb(errorStats.meanResidualDb)}`,
+    `- MAE: ${formatOptionalDb(errorStats.maeDb)}`,
+    `- RMSE: ${formatOptionalDb(errorStats.rmseDb)}`,
+    `- 標準偏差: ${formatOptionalDb(errorStats.stddevDb)}`,
+    `- 最大絶対誤差: ${formatOptionalDb(errorStats.maxAbsDb)}`,
+    '',
+    '## 品質指標',
+    `- 接続可能率: ${formatOptionalPercent(qualityStats.connectedRatio)}`,
+    `- 平均RSRQ: ${formatOptionalDb(qualityStats.avgRsrqDb)}`,
+    `- 平均SINR: ${formatOptionalDb(qualityStats.avgSinrDb)}`,
+    `- 平均DL: ${formatOptionalMbps(qualityStats.avgDlMbps)}`,
+    `- 平均UL: ${formatOptionalMbps(qualityStats.avgUlMbps)}`,
+    '',
+    '## 校正候補',
+    `- データ源: ${calibration.source}`,
+    `- 推奨 窓損失: ${formatDb(calibration.recommendedWindowLossDb)}`,
+    `- 推奨 屋内伝搬指数: ${numberFormatter.format(
+      calibration.recommendedIndoorPathLossExponent,
+    )}`,
+    `- 推奨 ナミゲート改善量: ${formatDb(calibration.recommendedNamigateGainDb)}`,
+    `- 校正前RMSE: ${formatOptionalDb(calibration.beforeRmseDb)}`,
+    `- 校正後RMSE: ${formatOptionalDb(calibration.afterRmseDb)}`,
+	    '',
+	    '## 実測点一覧',
+	    '| 点 | 状態 | x[m] | y[m] | 高さ | 3D距離 | 実測RSRP | 推定RSRP | 差分 | SINR | DL |',
+	    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+	    pointRows || '| 未入力 | - | - | - | - | - | - | - | - | - | - |',
+    '',
+    '## 感度分析',
+    '| 条件 | RSRP | 標準との差 | 接続可能面積 | 最大到達距離 |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    sensitivityRowsText,
+    '',
+    '## 信頼ケース',
+    '| ケース | RSRP | 接続可能面積 | 最大到達距離 |',
+    '| --- | ---: | ---: | ---: |',
+    confidenceRowsText,
+    '',
+    '## 備考',
+    protocol.notes || '未入力',
+    '',
+    '## 注意',
+    'これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである。',
+  ].join('\n')
 }
 
 function buildAiAnalysisText({
@@ -569,37 +1651,47 @@ function buildAiAnalysisText({
     '## AIへの依頼',
     '以下の推定値と実測値の差分を分析し、モデル誤差の傾向、窓損失・ナミゲート改善量の妥当性、追加で確認すべき測定条件を整理してください。',
     '',
-    '## 入力条件',
-    `- 周波数: ${numberFormatter.format(settings.frequencyMHz)} MHz`,
+	    '## 入力条件',
+	    `- 無線機プリセット: ${getModulePresetLabel(settings.modulePresetId)}`,
+	    `- 周波数: ${numberFormatter.format(settings.frequencyMHz)} MHz`,
     `- EIRP計算方式: ${settings.eirpMode === 'direct' ? '直接入力' : '無線機詳細から計算'}`,
     `- 実効EIRP: ${formatDbm(effectiveEirpDbm)}`,
     `- EIRP直接入力: ${formatDbm(settings.eirpDbm)}`,
-    `- 詳細EIRP: ${formatDbm(detailedEirpDbm)} = 送信出力 ${formatDbm(
-      settings.txPowerDbm,
-    )} + 送信アンテナ利得 ${formatDb(settings.txAntennaGainDbi)} - 送信給電損失 ${formatDb(
-      settings.txCableLossDb,
-    )} - その他送信損失 ${formatDb(settings.txOtherLossDb)}`,
-    `- 受信系補正: ${formatDb(receiverAdjustmentDb)} = 受信アンテナ利得 ${formatDb(
-      settings.rxAntennaGainDbi,
-    )} - 受信給電損失 ${formatDb(settings.rxCableLossDb)} - 受信機内部損失 ${formatDb(
-      settings.rxBodyLossDb,
-    )} - 偏波不整合損失 ${formatDb(settings.polarizationLossDb)} - フェージングマージン ${formatDb(
-      settings.fadeMarginDb,
-    )}`,
-    `- 屋外距離: ${formatMeters(settings.outdoorDistanceM)}`,
-    `- 地面反射補正: ${formatDb(settings.groundReflectionDb)}`,
-    `- 窓種別: ${windowLabel}`,
-    `- 窓損失: ${formatDb(settings.windowLossDb)}`,
-    `- 窓サイズ: ${numberFormatter.format(settings.windowWidthM)} x ${numberFormatter.format(
-      settings.windowHeightM,
-    )} m`,
-    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)} deg`,
-    `- 入射角損失: ${formatDb(angleLossDb)}`,
-    `- 部屋サイズ: ${numberFormatter.format(settings.roomWidthM)} x ${numberFormatter.format(
-      settings.roomDepthM,
-    )} m`,
-    `- 室内距離: ${formatMeters(settings.indoorDistanceM)}`,
-    `- 屋内伝搬指数: ${numberFormatter.format(settings.indoorPathLossExponent)}`,
+	    `- 詳細EIRP: ${formatDbm(detailedEirpDbm)} = 送信出力 ${formatDbm(
+	      settings.txPowerDbm,
+	    )} + 送信アンテナ利得 ${formatDb(settings.txAntennaGainDbi)} - 送信給電損失 ${formatDb(
+	      settings.txCableLossDb,
+	    )} - その他送信損失 ${formatDb(settings.txOtherLossDb)}`,
+	    `- 送信アンテナ高: ${formatMeters(settings.txAntennaHeightM)}`,
+	    `- 受信系補正: ${formatDb(receiverAdjustmentDb)} = 受信アンテナ利得 ${formatDb(
+	      settings.rxAntennaGainDbi,
+	    )} - 受信給電損失 ${formatDb(settings.rxCableLossDb)} - 受信機内部損失 ${formatDb(
+	      settings.rxBodyLossDb,
+	    )} - アンテナ指向ずれ損失 ${formatDb(
+	      settings.antennaAlignmentLossDb,
+	    )} - 偏波不整合損失 ${formatDb(settings.polarizationLossDb)} - フェージングマージン ${formatDb(
+	      settings.fadeMarginDb,
+	    )}`,
+	    `- 受信アンテナ高: ${formatMeters(settings.rxAntennaHeightM)}`,
+	    `- 屋外水平距離: ${formatMeters(settings.outdoorDistanceM)}`,
+	    `- 屋外3D距離: ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`,
+	    `- 室内水平距離: ${formatMeters(settings.indoorDistanceM)}`,
+	    `- 室内3D距離: ${formatMeters(calculateIndoorLinkDistanceM(settings))}`,
+	    `- 地面反射補正: ${formatDb(settings.groundReflectionDb)}`,
+	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
+	    `- 窓種別: ${windowLabel}`,
+	    `- 窓損失: ${formatDb(settings.windowLossDb)}`,
+	    `- 窓サイズ: ${numberFormatter.format(settings.windowWidthM)} x ${numberFormatter.format(
+	      settings.windowHeightM,
+	    )} m`,
+	    `- 窓中心高: ${formatMeters(settings.windowCenterHeightM)}`,
+	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)} deg`,
+	    `- 入射角損失: ${formatDb(angleLossDb)}`,
+	    `- 部屋サイズ: ${numberFormatter.format(settings.roomWidthM)} x ${numberFormatter.format(
+	      settings.roomDepthM,
+	    )} m`,
+	    `- 屋内伝搬指数: ${numberFormatter.format(settings.indoorPathLossExponent)}`,
+	    `- 屋内遮蔽損失: ${formatDb(settings.indoorObstacleLossDb)}`,
     `- 接続しきい値: ${formatDbm(settings.connectionThresholdDbm)}`,
     `- ナミゲートプリセット: ${namigateLabel}`,
     `- ナミゲート改善量: ${formatDb(settings.namigateGainDb)}`,
@@ -611,7 +1703,8 @@ function buildAiAnalysisText({
     `- 設置効率: ${numberFormatter.format(settings.namigateInstallationEfficiencyPercent)}%`,
     `- 追加損失: ${formatDb(settings.namigateAdditionalLossDb)}`,
     `- 最大総改善量: ${formatDb(settings.namigateMaxTotalGainDb)}`,
-    `- ナミゲート総改善量: ${formatDb(totalNamigateGainDb)}`,
+	    `- ナミゲート総改善量: ${formatDb(totalNamigateGainDb)}`,
+	    `- 法規制メモ: このコピー内容は技術検討用であり、EIRP、空中線電力、設置場所、周波数帯の法令適合を判定するものではありません。`,
     '',
     '## ナミゲート効果モデルの根拠',
     '- 現状は厳密な電磁界解析や測定校正済みモデルではなく、MVP仕様に基づく簡易リンクバジェットです。',
@@ -647,6 +1740,7 @@ function NumberInput({
   max,
   step = 1,
   unit,
+  help,
 }: NumberInputProps) {
   const [inputState, setInputState] = useState({
     draftValue: formatNumberInputValue(value),
@@ -675,7 +1769,7 @@ function NumberInput({
 
   return (
     <label className="control">
-      <span>{label}</span>
+      <TermLabel label={label} help={help ?? HELP_TEXT[label]} />
       <div className="input-row">
         <input
           type="number"
@@ -726,7 +1820,12 @@ function NumberInput({
   )
 }
 
-function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramProps) {
+function PositionScene3D({
+  settings,
+  angleLossDb,
+  areaGainDb,
+  measurementPoints = [],
+}: PositionDiagramProps) {
   const mountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -738,25 +1837,36 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
 
     const roomWidthM = clamp(settings.roomWidthM, 2, 30)
     const roomDepthM = clamp(settings.roomDepthM, 2, 40)
-    const windowWidthM = clamp(settings.windowWidthM, 0.2, roomWidthM)
-    const windowHeightM = clamp(settings.windowHeightM, 0.2, 4)
-    const namigateWidthM = clamp(settings.namigateWidthCm / 100, 0.05, windowWidthM)
-    const namigateHeightM = clamp(settings.namigateHeightCm / 100, 0.05, windowHeightM)
-    const windowBottomM = 0.72
-    const windowCenterY = windowBottomM + windowHeightM / 2
-    const wallHeightM = Math.max(3.2, windowBottomM + windowHeightM + 0.72)
-    const receiverZ = clamp(settings.indoorDistanceM, 0.7, roomDepthM - 0.45)
-    const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
-    const outdoorDisplayM = clamp(Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.6, 3, 9)
+	    const windowWidthM = clamp(settings.windowWidthM, 0.2, roomWidthM)
+	    const windowHeightM = clamp(settings.windowHeightM, 0.2, 4)
+	    const namigateWidthM = clamp(settings.namigateWidthCm / 100, 0.05, windowWidthM)
+	    const namigateHeightM = clamp(settings.namigateHeightCm / 100, 0.05, windowHeightM)
+	    const windowCenterY = clamp(
+	      settings.windowCenterHeightM,
+	      windowHeightM / 2 + 0.1,
+	      12,
+	    )
+	    const windowBottomM = windowCenterY - windowHeightM / 2
+	    const transmitterHeightY = clamp(settings.txAntennaHeightM, 0.4, 12)
+	    const receiverHeightY = clamp(settings.rxAntennaHeightM, 0.35, 5)
+	    const wallHeightM = Math.max(
+	      3.2,
+	      windowBottomM + windowHeightM + 0.72,
+	      transmitterHeightY + 0.8,
+	      receiverHeightY + 0.8,
+	    )
+	    const receiverZ = clamp(settings.indoorDistanceM, 0.7, roomDepthM - 0.45)
+	    const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+	    const outdoorDisplayM = clamp(Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.6, 3, 9)
     const transmitterX = clamp(
       -Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM,
       -roomWidthM / 2 + 0.6,
       roomWidthM / 2 - 0.6,
-    )
-    const transmitterZ = -outdoorDisplayM
-    const transmitterPoint = new THREE.Vector3(transmitterX, windowCenterY, transmitterZ)
-    const windowPoint = new THREE.Vector3(0, windowCenterY, 0)
-    const receiverPoint = new THREE.Vector3(0, 1.05, receiverZ)
+	    )
+	    const transmitterZ = -outdoorDisplayM
+	    const transmitterPoint = new THREE.Vector3(transmitterX, transmitterHeightY, transmitterZ)
+	    const windowPoint = new THREE.Vector3(0, windowCenterY, 0)
+	    const receiverPoint = new THREE.Vector3(0, receiverHeightY, receiverZ)
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xf7fafc)
@@ -882,17 +1992,17 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
 
     const transmitterGroup = new THREE.Group()
     transmitterGroup.position.set(transmitterX, 0, transmitterZ)
-    const mast = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.055, 0.08, windowCenterY, 16),
-      new THREE.MeshStandardMaterial({ color: 0x16212c, roughness: 0.55 }),
-    )
-    mast.position.y = windowCenterY / 2
-    transmitterGroup.add(mast)
+	    const mast = new THREE.Mesh(
+	      new THREE.CylinderGeometry(0.055, 0.08, transmitterHeightY, 16),
+	      new THREE.MeshStandardMaterial({ color: 0x16212c, roughness: 0.55 }),
+	    )
+	    mast.position.y = transmitterHeightY / 2
+	    transmitterGroup.add(mast)
     const transmitterHead = new THREE.Mesh(
       new THREE.SphereGeometry(0.2, 24, 16),
       new THREE.MeshStandardMaterial({ color: 0x16212c, roughness: 0.35 }),
     )
-    transmitterHead.position.y = windowCenterY
+	    transmitterHead.position.y = transmitterHeightY
     transmitterHead.castShadow = true
     transmitterGroup.add(transmitterHead)
     scene.add(transmitterGroup)
@@ -1030,14 +2140,17 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
     }
 
     const labels = [
-      { label: makeLabel('送信機'), position: new THREE.Vector3(transmitterX, windowCenterY + 0.55, transmitterZ) },
-      { label: makeLabel(`屋外距離 ${formatMeters(settings.outdoorDistanceM)}`), position: new THREE.Vector3(transmitterX / 2, 0.42, transmitterZ / 2) },
-      { label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'), position: new THREE.Vector3(transmitterX * 0.28, windowCenterY + 0.35, -0.72) },
-      { label: makeLabel(`窓幅 ${numberFormatter.format(settings.windowWidthM)}m`, '#0071BD'), position: new THREE.Vector3(0, windowWidthLineY + 0.18, -0.1) },
-      { label: makeLabel(`窓高 ${numberFormatter.format(settings.windowHeightM)}m`, '#0071BD'), position: new THREE.Vector3(windowHeightLineX - 0.55, windowCenterY, -0.1) },
-      { label: makeLabel(`ナミゲート ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(settings.namigateHeightCm)}cm`, '#0071BD'), position: new THREE.Vector3(namigateWidthM / 2 + 1.1, windowCenterY, -0.24) },
-      { label: makeLabel('受信機'), position: new THREE.Vector3(0.65, receiverPoint.y + 0.28, receiverZ) },
-      { label: makeLabel(`室内距離 ${formatMeters(settings.indoorDistanceM)}`), position: new THREE.Vector3(0.9, 0.38, receiverZ / 2) },
+	      { label: makeLabel('送信機'), position: new THREE.Vector3(transmitterX, transmitterHeightY + 0.55, transmitterZ) },
+	      { label: makeLabel(`送信高 ${formatMeters(settings.txAntennaHeightM)}`), position: new THREE.Vector3(transmitterX + 0.85, transmitterHeightY / 2, transmitterZ) },
+	      { label: makeLabel(`屋外3D ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`), position: new THREE.Vector3(transmitterX / 2, 0.42, transmitterZ / 2) },
+	      { label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'), position: new THREE.Vector3(transmitterX * 0.28, windowCenterY + 0.35, -0.72) },
+	      { label: makeLabel(`窓幅 ${numberFormatter.format(settings.windowWidthM)}m`, '#0071BD'), position: new THREE.Vector3(0, windowWidthLineY + 0.18, -0.1) },
+	      { label: makeLabel(`窓高 ${numberFormatter.format(settings.windowHeightM)}m`, '#0071BD'), position: new THREE.Vector3(windowHeightLineX - 0.55, windowCenterY, -0.1) },
+	      { label: makeLabel(`窓中心 ${formatMeters(settings.windowCenterHeightM)}`, '#0071BD'), position: new THREE.Vector3(-windowWidthM / 2 - 0.9, windowCenterY, -0.24) },
+	      { label: makeLabel(`ナミゲート ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(settings.namigateHeightCm)}cm`, '#0071BD'), position: new THREE.Vector3(namigateWidthM / 2 + 1.1, windowCenterY, -0.24) },
+	      { label: makeLabel('受信機'), position: new THREE.Vector3(0.65, receiverPoint.y + 0.28, receiverZ) },
+	      { label: makeLabel(`受信高 ${formatMeters(settings.rxAntennaHeightM)}`), position: new THREE.Vector3(0.9, receiverPoint.y / 2, receiverZ) },
+	      { label: makeLabel(`室内3D ${formatMeters(calculateIndoorLinkDistanceM(settings))}`), position: new THREE.Vector3(0.9, 0.38, receiverZ / 2) },
       { label: makeLabel(`部屋幅 ${numberFormatter.format(settings.roomWidthM)}m`), position: new THREE.Vector3(0, 0.42, roomWidthLineZ + 0.22) },
       { label: makeLabel(`奥行 ${numberFormatter.format(settings.roomDepthM)}m`), position: new THREE.Vector3(roomDepthLineX + 0.58, 0.42, roomDepthM / 2) },
     ]
@@ -1045,6 +2158,45 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
     labels.forEach(({ label, position }) => {
       label.position.copy(position)
       scene.add(label)
+    })
+
+    measurementPoints.slice(0, 24).forEach((point, index) => {
+      const scenarioColor =
+        SCENARIOS.find((scenario) => scenario.key === point.scenario)?.color ?? MAIN_COLOR
+      const pointX = clamp(point.xM - roomWidthM / 2, -roomWidthM / 2 + 0.12, roomWidthM / 2 - 0.12)
+      const pointY = clamp(point.heightM, 0.35, wallHeightM - 0.25)
+      const pointZ = clamp(point.yM, 0.15, roomDepthM - 0.15)
+      const markerGroup = new THREE.Group()
+      markerGroup.position.set(pointX, 0, pointZ)
+
+      const markerPole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.035, pointY, 12),
+        new THREE.MeshStandardMaterial({ color: 0x5d6b78, roughness: 0.6 }),
+      )
+      markerPole.position.y = pointY / 2
+      markerGroup.add(markerPole)
+
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 20, 12),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(scenarioColor),
+          emissive: new THREE.Color(scenarioColor),
+          emissiveIntensity: 0.25,
+          roughness: 0.32,
+        }),
+      )
+      marker.position.y = pointY
+      marker.castShadow = true
+      markerGroup.add(marker)
+      scene.add(markerGroup)
+
+      const markerLabel = makeLabel(
+        `${point.name} ${formatDbm(point.rsrpDbm)}`,
+        scenarioColor,
+      )
+      const sideOffset = index % 2 === 0 ? 0.48 : -0.48
+      markerLabel.position.set(pointX + sideOffset, pointY + 0.36, pointZ)
+      scene.add(markerLabel)
     })
 
     const resize = () => {
@@ -1095,7 +2247,7 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [settings, angleLossDb, areaGainDb])
+  }, [settings, angleLossDb, areaGainDb, measurementPoints])
 
   return (
     <div className="position-3d-layout">
@@ -1107,8 +2259,9 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           <span>3D表示</span>
           <strong>屋外から窓面へ入射</strong>
           <small>
-            屋外距離 {formatMeters(settings.outdoorDistanceM)} / 入射角{' '}
-            {numberFormatter.format(settings.incidentAngleDeg)}° / 損失 {formatDb(angleLossDb)}
+            水平 {formatMeters(settings.outdoorDistanceM)} / 3D{' '}
+            {formatMeters(calculateOutdoorLinkDistanceM(settings))} / 送信高{' '}
+            {formatMeters(settings.txAntennaHeightM)}
           </small>
         </div>
         <div>
@@ -1118,7 +2271,8 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
             {numberFormatter.format(settings.windowHeightM)}m
           </strong>
           <small>
-            ナミゲート {numberFormatter.format(settings.namigateWidthCm)}×
+            中心高 {formatMeters(settings.windowCenterHeightM)} / ナミゲート{' '}
+            {numberFormatter.format(settings.namigateWidthCm)}×
             {numberFormatter.format(settings.namigateHeightCm)}cm / 面積補正{' '}
             {formatDb(areaGainDb)}
           </small>
@@ -1127,16 +2281,26 @@ function PositionScene3D({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           <span>受信点</span>
           <strong>室内 {formatMeters(settings.indoorDistanceM)}</strong>
           <small>
-            部屋幅 {numberFormatter.format(settings.roomWidthM)}m / 奥行{' '}
-            {numberFormatter.format(settings.roomDepthM)}m
+            3D {formatMeters(calculateIndoorLinkDistanceM(settings))} / 受信高{' '}
+            {formatMeters(settings.rxAntennaHeightM)} / 入射角損失 {formatDb(angleLossDb)}
           </small>
+        </div>
+        <div>
+          <span>実測点</span>
+          <strong>{numberFormatter.format(measurementPoints.length)} 点</strong>
+          <small>CSV実測点を3D上に重ね表示</small>
         </div>
       </div>
     </div>
   )
 }
 
-function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
+function HeatmapPlan({
+  settings,
+  scenario,
+  heatmap,
+  measurementPoints,
+}: HeatmapPlanProps) {
   const roomWidthM = Math.max(settings.roomWidthM, 1)
   const roomDepthM = Math.max(settings.roomDepthM, 1)
   const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
@@ -1159,6 +2323,9 @@ function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
   )
   const namigateLeftPct = 50 - namigateWidthPct / 2
   const hasNamigate = scenario.key === 'withNamigate'
+  const scenarioMeasurements = measurementPoints.filter(
+    (point) => point.scenario === scenario.key,
+  )
 
   return (
     <div className="heatmap-plan">
@@ -1188,7 +2355,7 @@ function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
           </text>
         </svg>
         <span className="heatmap-outdoor-distance">
-          屋外 {formatMeters(settings.outdoorDistanceM)}
+          屋外3D {formatMeters(calculateOutdoorLinkDistanceM(settings))}
         </span>
       </div>
 
@@ -1293,6 +2460,41 @@ function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
               ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm
             </text>
           ) : null}
+          {scenarioMeasurements.map((point) => {
+            const xPct = clamp((point.xM / roomWidthM) * 100, 3, 97)
+            const yPct = clamp((point.yM / roomDepthM) * 100, 4, 96)
+            const residualDb =
+              point.rsrpDbm -
+              calculateRsrpDbm(
+                settings,
+                point.scenario,
+                getMeasurementPointDistanceM(settings, point),
+                point.heightM,
+              )
+
+            return (
+              <g key={point.id}>
+                <circle
+                  className={
+                    residualDb >= 0
+                      ? 'heatmap-measured-point is-positive'
+                      : 'heatmap-measured-point is-negative'
+                  }
+                  cx={xPct}
+                  cy={yPct}
+                  r="3.2"
+                />
+                <text
+                  className="heatmap-measured-label"
+                  textAnchor="middle"
+                  x={xPct}
+                  y={yPct - 4.6}
+                >
+                  {point.name}
+                </text>
+              </g>
+            )
+          })}
         </svg>
       </div>
 
@@ -1301,12 +2503,15 @@ function HeatmapPlan({ settings, scenario, heatmap }: HeatmapPlanProps) {
         <span>奥行 {numberFormatter.format(settings.roomDepthM)}m</span>
         <span>窓幅 {numberFormatter.format(settings.windowWidthM)}m</span>
         <span>窓高 {numberFormatter.format(settings.windowHeightM)}m</span>
-        <span>室内 {formatMeters(settings.indoorDistanceM)}</span>
+        <span>窓中心高 {formatMeters(settings.windowCenterHeightM)}</span>
+        <span>室内3D {formatMeters(calculateIndoorLinkDistanceM(settings))}</span>
+        <span>受信高 {formatMeters(settings.rxAntennaHeightM)}</span>
         {hasNamigate ? (
           <span>ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm幅</span>
         ) : (
           <span>ナミゲートなし</span>
         )}
+        <span>実測点 {numberFormatter.format(scenarioMeasurements.length)}点</span>
       </div>
     </div>
   )
@@ -1318,26 +2523,33 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
   const roomWidth = 300
   const roomHeight = 202
   const windowX = roomX
-  const windowCenterY = roomY + roomHeight / 2
+  const verticalMaxM = Math.max(
+    3,
+    settings.txAntennaHeightM,
+    settings.windowCenterHeightM + settings.windowHeightM / 2,
+    settings.rxAntennaHeightM,
+  )
+  const heightToDiagramY = (heightM: number) =>
+    roomY + roomHeight - (clamp(heightM, 0, verticalMaxM) / verticalMaxM) * roomHeight
+  const windowCenterY = heightToDiagramY(settings.windowCenterHeightM)
   const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
-  const incidentOffset = Math.tan(((90 - safeAngle) * Math.PI) / 180) * 92
   const transmitterX = 70
-  const transmitterY = clamp(windowCenterY - incidentOffset, 34, 266)
+  const transmitterY = heightToDiagramY(settings.txAntennaHeightM)
   const receiverX =
     roomX +
     34 +
     clamp(settings.indoorDistanceM / Math.max(settings.roomDepthM, 1), 0, 1) *
       (roomWidth - 82)
-  const receiverY = clamp(
-    windowCenterY + (windowCenterY - transmitterY) * 0.28,
-    roomY + 34,
-    roomY + roomHeight - 34,
-  )
+  const receiverY = heightToDiagramY(settings.rxAntennaHeightM)
   const normalStartX = windowX - 90
   const windowLabel =
     WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId)?.label ??
     '任意'
-  const windowPatchHeight = clamp(settings.windowHeightM * 44, 46, 132)
+  const windowPatchHeight = clamp(
+    (settings.windowHeightM / verticalMaxM) * roomHeight,
+    46,
+    132,
+  )
   const namigatePatchHeight = clamp(
     (settings.namigateHeightCm / 100 / Math.max(settings.windowHeightM, 0.2)) *
       windowPatchHeight,
@@ -1482,20 +2694,29 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
         <text className="diagram-label" x={transmitterX - 48} y={transmitterY - 34}>
           送信機
         </text>
+        <text className="diagram-dimension-label" x={transmitterX + 18} y={transmitterY + 34}>
+          送信高 {formatMeters(settings.txAntennaHeightM)}
+        </text>
         <text className="diagram-label" x={receiverX - 28} y={receiverY - 24}>
           受信機
         </text>
+        <text className="diagram-dimension-label" x={receiverX + 18} y={receiverY + 30}>
+          受信高 {formatMeters(settings.rxAntennaHeightM)}
+        </text>
         <text className="diagram-label" x={windowX - 62} y={windowCenterY - 58}>
           窓面
+        </text>
+        <text className="diagram-dimension-label" x={windowX + 18} y={windowCenterY - 22}>
+          中心高 {formatMeters(settings.windowCenterHeightM)}
         </text>
         <text className="diagram-accent-label" x={windowX + 18} y={windowCenterY + 5}>
           ナミゲート
         </text>
         <text className="diagram-muted-label" x="150" y="286">
-          屋外距離 {formatMeters(settings.outdoorDistanceM)}
+          屋外3D {formatMeters(calculateOutdoorLinkDistanceM(settings))}
         </text>
         <text className="diagram-muted-label" x={windowX + 42} y="286">
-          室内距離 {formatMeters(settings.indoorDistanceM)}
+          室内3D {formatMeters(calculateIndoorLinkDistanceM(settings))}
         </text>
         <text className="diagram-muted-label" x={windowX - 95} y={windowCenterY - 18}>
           入射角 {numberFormatter.format(safeAngle)}° / 損失 {formatDb(angleLossDb)}
@@ -1537,10 +2758,45 @@ function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [measuredRsrpValues, setMeasuredRsrpValues] =
     useState<MeasuredRsrpValues>(DEFAULT_MEASURED_RSRP)
+  const [measurementCsvText, setMeasurementCsvText] = useState(SAMPLE_MEASUREMENT_CSV)
+  const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([])
+  const [importStatus, setImportStatus] = useState('')
+  const [protocol, setProtocol] = useState<TestProtocol>(DEFAULT_PROTOCOL)
+  const [savedCases, setSavedCases] = useState<SavedTestCase[]>(loadSavedTestCases)
+  const [selectedCaseId, setSelectedCaseId] = useState('')
+  const [caseName, setCaseName] = useState('')
+  const [activeView, setActiveView] = useState<ActiveView>('overview')
   const [copyStatus, setCopyStatus] = useState('')
 
-  const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setSettings((current) => ({ ...current, [key]: value }))
+  const updateSetting = <K extends keyof Settings>(
+    key: K,
+    value: Settings[K],
+    options: { keepModulePreset?: boolean } = {},
+  ) => {
+    setSettings((current) => ({
+      ...current,
+      modulePresetId:
+        key === 'modulePresetId' ||
+        options.keepModulePreset ||
+        !MODULE_PRESET_SETTING_KEYS.has(key)
+          ? current.modulePresetId
+          : 'custom',
+      [key]: value,
+    }))
+  }
+
+  const handleModulePresetChange = (presetId: ModulePresetId) => {
+    const preset = MODULE_PRESETS.find((item) => item.id === presetId)
+
+    if (!preset) {
+      return
+    }
+
+    setSettings((current) => ({
+      ...current,
+      ...preset.settings,
+      modulePresetId: presetId,
+    }))
   }
 
   const updateMeasuredRsrp = (key: ScenarioKey, value: string) => {
@@ -1548,18 +2804,45 @@ function App() {
     setCopyStatus('')
   }
 
+  const updateProtocol = <K extends keyof TestProtocol>(
+    key: K,
+    value: TestProtocol[K],
+  ) => {
+    setProtocol((current) => ({ ...current, [key]: value }))
+  }
+
+  const updateProtocolChecklist = (key: ProtocolChecklistKey, value: boolean) => {
+    setProtocol((current) => ({
+      ...current,
+      checklist: {
+        ...current.checklist,
+        [key]: value,
+      },
+    }))
+  }
+
+  const currentOutdoorLinkDistanceM = useMemo(
+    () => calculateOutdoorLinkDistanceM(settings),
+    [settings],
+  )
+
+  const currentIndoorLinkDistanceM = useMemo(
+    () => calculateIndoorLinkDistanceM(settings),
+    [settings],
+  )
+
   const currentFsplDb = useMemo(
-    () => calculateFsplDb(settings.frequencyMHz, settings.outdoorDistanceM),
-    [settings.frequencyMHz, settings.outdoorDistanceM],
+    () => calculateFsplDb(settings.frequencyMHz, currentOutdoorLinkDistanceM),
+    [currentOutdoorLinkDistanceM, settings.frequencyMHz],
   )
 
   const currentIndoorLossDb = useMemo(
     () =>
       calculateIndoorLossDb(
-        settings.indoorDistanceM,
+        currentIndoorLinkDistanceM,
         settings.indoorPathLossExponent,
       ),
-    [settings.indoorDistanceM, settings.indoorPathLossExponent],
+    [currentIndoorLinkDistanceM, settings.indoorPathLossExponent],
   )
 
   const effectiveEirpDbm = useMemo(
@@ -1628,6 +2911,29 @@ function App() {
         }
       }),
     [measuredRsrpValues, scenarioResults],
+  )
+
+  const pointComparisons = useMemo(
+    () => buildPointComparisons(settings, measurementPoints),
+    [measurementPoints, settings],
+  )
+
+  const pointErrorStats = useMemo(
+    () =>
+      calculateErrorStats(
+        pointComparisons.map((comparison) => comparison.residualDb),
+      ),
+    [pointComparisons],
+  )
+
+  const qualityStats = useMemo(
+    () => calculateQualityStats(measurementPoints, settings.connectionThresholdDbm),
+    [measurementPoints, settings.connectionThresholdDbm],
+  )
+
+  const calibrationResult = useMemo(
+    () => calculateCalibrationResult(settings, measurementPoints, measuredComparisons),
+    [measuredComparisons, measurementPoints, settings],
   )
 
   const noWindowRsrp = scenarioResults[0].rsrpDbm
@@ -1762,6 +3068,160 @@ function App() {
     [settings, windowGapDb],
   )
 
+  const sensitivityRows = useMemo(() => {
+    const baseline = scenarioResults[2]
+    const candidates: Array<{ label: string; settings: Settings }> = [
+      { label: '標準', settings },
+      {
+        label: '窓損失 +5dB',
+        settings: { ...settings, windowLossDb: settings.windowLossDb + 5 },
+      },
+      {
+        label: '窓損失 -5dB',
+        settings: {
+          ...settings,
+          windowLossDb: Math.max(settings.windowLossDb - 5, 0),
+        },
+      },
+      {
+        label: '改善量 +5dB',
+        settings: { ...settings, namigateGainDb: settings.namigateGainDb + 5 },
+      },
+      {
+        label: '改善量 -5dB',
+        settings: {
+          ...settings,
+          namigateGainDb: Math.max(settings.namigateGainDb - 5, 0),
+        },
+      },
+      {
+        label: '伝搬指数 +0.3',
+        settings: {
+          ...settings,
+          indoorPathLossExponent: settings.indoorPathLossExponent + 0.3,
+        },
+      },
+      {
+        label: '入射角 -15°',
+        settings: {
+          ...settings,
+          incidentAngleDeg: Math.max(settings.incidentAngleDeg - 15, 15),
+        },
+      },
+      {
+        label: '送信高 +5m',
+        settings: {
+          ...settings,
+          txAntennaHeightM: settings.txAntennaHeightM + 5,
+        },
+      },
+      {
+        label: '受信高 +1m',
+        settings: {
+          ...settings,
+          rxAntennaHeightM: settings.rxAntennaHeightM + 1,
+        },
+      },
+      {
+        label: '指向ずれ +3dB',
+        settings: {
+          ...settings,
+          antennaAlignmentLossDb: settings.antennaAlignmentLossDb + 3,
+        },
+      },
+      {
+        label: '屋内遮蔽 +5dB',
+        settings: {
+          ...settings,
+          indoorObstacleLossDb: settings.indoorObstacleLossDb + 5,
+        },
+      },
+    ]
+
+    return candidates.map((candidate) => {
+      const rsrpDbm = calculateRsrpDbm(candidate.settings, 'withNamigate')
+      const connectedAreaM2 = buildHeatmap(
+        candidate.settings,
+        'withNamigate',
+      ).connectedAreaM2
+      const maxReachM = calculateMaxReachM(candidate.settings, 'withNamigate')
+
+      return {
+        label: candidate.label,
+        rsrpDbm,
+        connectedAreaM2,
+        maxReachM,
+        deltaRsrpDb: rsrpDbm - baseline.rsrpDbm,
+      }
+    })
+  }, [scenarioResults, settings])
+
+  const confidenceRows = useMemo(() => {
+    const cases: Array<{ label: string; settings: Settings }> = [
+      {
+        label: '保守',
+        settings: {
+          ...settings,
+          windowLossDb: settings.windowLossDb + 5,
+          namigateGainDb: Math.max(settings.namigateGainDb - 5, 0),
+          indoorPathLossExponent: settings.indoorPathLossExponent + 0.3,
+          fadeMarginDb: settings.fadeMarginDb + 3,
+          antennaAlignmentLossDb: settings.antennaAlignmentLossDb + 2,
+          indoorObstacleLossDb: settings.indoorObstacleLossDb + 3,
+        },
+      },
+      { label: '標準', settings },
+      {
+        label: '楽観',
+        settings: {
+          ...settings,
+          windowLossDb: Math.max(settings.windowLossDb - 3, 0),
+          namigateGainDb: settings.namigateGainDb + 3,
+          indoorPathLossExponent: Math.max(
+            settings.indoorPathLossExponent - 0.2,
+            0.5,
+          ),
+          fadeMarginDb: Math.max(settings.fadeMarginDb - 2, 0),
+          antennaAlignmentLossDb: Math.max(settings.antennaAlignmentLossDb - 1, 0),
+          indoorObstacleLossDb: Math.max(settings.indoorObstacleLossDb - 2, 0),
+        },
+      },
+    ]
+
+    return cases.map((item) => ({
+      label: item.label,
+      rsrpDbm: calculateRsrpDbm(item.settings, 'withNamigate'),
+      connectedAreaM2: buildHeatmap(item.settings, 'withNamigate').connectedAreaM2,
+      maxReachM: calculateMaxReachM(item.settings, 'withNamigate'),
+    }))
+  }, [settings])
+
+  const experimentReportText = useMemo(
+    () =>
+      buildExperimentReport({
+        settings,
+        protocol,
+        scenarioResults,
+        pointComparisons,
+        errorStats: pointErrorStats,
+        qualityStats,
+        calibration: calibrationResult,
+        sensitivityRows,
+        confidenceRows,
+      }),
+    [
+      calibrationResult,
+      confidenceRows,
+      pointComparisons,
+      pointErrorStats,
+      protocol,
+      qualityStats,
+      scenarioResults,
+      sensitivityRows,
+      settings,
+    ],
+  )
+
   const handleWindowPresetChange = (presetId: WindowPresetId) => {
     const preset = WINDOW_PRESETS.find((item) => item.id === presetId)
     setSettings((current) => ({
@@ -1806,6 +3266,86 @@ function App() {
     }
   }
 
+  const handleImportMeasurementCsv = (text = measurementCsvText) => {
+    const points = parseMeasurementCsv(text)
+    setMeasurementPoints(points)
+    setImportStatus(
+      points.length === 0
+        ? '取り込める実測点がありません'
+        : `${numberFormatter.format(points.length)}点の実測データを取り込みました`,
+    )
+  }
+
+  const handleApplyCalibration = () => {
+    setSettings((current) => ({
+      ...current,
+      windowPresetId: 'custom',
+      windowLossDb: calibrationResult.recommendedWindowLossDb,
+      indoorPathLossExponent: calibrationResult.recommendedIndoorPathLossExponent,
+      namigatePresetId: 'custom',
+      namigateGainDb: calibrationResult.recommendedNamigateGainDb,
+    }))
+    setCopyStatus('校正候補を入力条件へ反映しました')
+  }
+
+  const handleCopyExperimentReport = async () => {
+    try {
+      await navigator.clipboard.writeText(experimentReportText)
+      setCopyStatus('実証レポートをコピーしました')
+    } catch {
+      setCopyStatus('レポートをコピーできませんでした')
+    }
+  }
+
+  const handleSaveCase = () => {
+    const name =
+      caseName.trim() ||
+      protocol.siteName.trim() ||
+      `試験ケース ${new Date().toLocaleString('ja-JP')}`
+    const savedCase: SavedTestCase = {
+      id: `${Date.now()}`,
+      name,
+      savedAt: new Date().toISOString(),
+      settings,
+      measuredRsrpValues,
+      measurementPoints,
+      protocol,
+    }
+    const nextCases = [
+      savedCase,
+      ...savedCases.filter((item) => item.name !== name),
+    ].slice(0, 12)
+    setSavedCases(nextCases)
+    persistSavedTestCases(nextCases)
+    setSelectedCaseId(savedCase.id)
+    setCaseName(name)
+    setCopyStatus('試験ケースを保存しました')
+  }
+
+  const handleLoadCase = () => {
+    const savedCase = savedCases.find((item) => item.id === selectedCaseId)
+
+    if (!savedCase) {
+      setCopyStatus('読み込む試験ケースを選択してください')
+      return
+    }
+
+    setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
+    setMeasuredRsrpValues(savedCase.measuredRsrpValues)
+    setMeasurementPoints(savedCase.measurementPoints)
+    setProtocol(savedCase.protocol)
+    setCaseName(savedCase.name)
+    setCopyStatus('試験ケースを読み込みました')
+  }
+
+  const handleDeleteCase = () => {
+    const nextCases = savedCases.filter((item) => item.id !== selectedCaseId)
+    setSavedCases(nextCases)
+    persistSavedTestCases(nextCases)
+    setSelectedCaseId('')
+    setCopyStatus('試験ケースを削除しました')
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -1825,8 +3365,48 @@ function App() {
             <h2>入力条件</h2>
           </div>
 
-          <div className="control-group">
-            <h3>屋外電波</h3>
+          <details className="control-group" open>
+            <summary>
+              <span>屋外電波</span>
+              <HelpTip text="送信機から窓面へ届くまでの条件です。まずは周波数、EIRP、屋外距離を確認します。" />
+            </summary>
+            <p className="control-group-note">
+              送信側の強さ、アンテナ高、屋外距離を決めます。EIRPが分かる場合は直接入力、無線機構成が分かる場合は詳細計算を使います。
+            </p>
+            <label className="control">
+              <TermLabel label="無線機プリセット" help={HELP_TEXT['無線機プリセット']} />
+              <select
+                value={settings.modulePresetId}
+                onChange={(event) =>
+                  handleModulePresetChange(event.target.value as ModulePresetId)
+                }
+              >
+                {MODULE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="model-note regulation-note">
+              <strong>法規制メモ</strong>
+              <span>
+                ローカル5Gは無線局免許を前提とする制度です。日本では主に
+                4.6-4.9GHz帯と28.2-29.1GHz帯が対象で、周波数帯、設置場所、
+                自己土地/他者土地、同期条件、空中線電力・EIRP等の条件確認が必要です。
+                この画面は上限適合判定ではないため、申請・運用前に最新の総務省ガイドラインと管轄の総合通信局で確認してください。
+              </span>
+            </div>
+            <div className="model-note preset-note">
+              <strong>プリセットの扱い</strong>
+              <span>
+                {
+                  MODULE_PRESETS.find((preset) => preset.id === settings.modulePresetId)
+                    ?.description
+                }
+                。値は汎用例であり、メーカー仕様・技適・免許条件を保証しません。
+              </span>
+            </div>
             <NumberInput
               label="周波数"
               value={settings.frequencyMHz}
@@ -1836,7 +3416,7 @@ function App() {
               onChange={(value) => updateSetting('frequencyMHz', value)}
             />
             <label className="control">
-              <span>EIRP計算方式</span>
+              <TermLabel label="EIRP計算方式" help={HELP_TEXT['EIRP計算方式']} />
               <select
                 value={settings.eirpMode}
                 onChange={(event) =>
@@ -1867,6 +3447,14 @@ function App() {
               step={0.5}
               unit="dBi"
               onChange={(value) => updateSetting('txAntennaGainDbi', value)}
+            />
+            <NumberInput
+              label="送信アンテナ高"
+              value={settings.txAntennaHeightM}
+              min={0.2}
+              step={0.1}
+              unit="m"
+              onChange={(value) => updateSetting('txAntennaHeightM', value)}
             />
             <NumberInput
               label="送信給電損失"
@@ -1908,6 +3496,14 @@ function App() {
               onChange={(value) => updateSetting('rxBodyLossDb', value)}
             />
             <NumberInput
+              label="アンテナ指向ずれ損失"
+              value={settings.antennaAlignmentLossDb}
+              min={0}
+              step={0.5}
+              unit="dB"
+              onChange={(value) => updateSetting('antennaAlignmentLossDb', value)}
+            />
+            <NumberInput
               label="偏波不整合損失"
               value={settings.polarizationLossDb}
               min={0}
@@ -1932,18 +3528,32 @@ function App() {
               onChange={(value) => updateSetting('outdoorDistanceM', value)}
             />
             <NumberInput
+              label="屋外遮蔽損失"
+              value={settings.outdoorObstructionLossDb}
+              min={0}
+              step={0.5}
+              unit="dB"
+              onChange={(value) => updateSetting('outdoorObstructionLossDb', value)}
+            />
+            <NumberInput
               label="地面反射補正"
               value={settings.groundReflectionDb}
               step={0.5}
               unit="dB"
               onChange={(value) => updateSetting('groundReflectionDb', value)}
             />
-          </div>
+          </details>
 
-          <div className="control-group">
-            <h3>窓条件</h3>
+          <details className="control-group" open>
+            <summary>
+              <span>窓条件</span>
+              <HelpTip text="窓ガラスで失われる量と、電波が窓に入る角度を設定します。Low-Eでは損失が大きくなりやすいです。" />
+            </summary>
+            <p className="control-group-note">
+              窓あり状態の悪化量を決める中心条件です。窓中心高は送信/受信アンテナ高との差から3D距離を出すために使います。
+            </p>
             <label className="control">
-              <span>窓種別</span>
+              <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
               <select
                 value={settings.windowPresetId}
                 onChange={(event) =>
@@ -1985,6 +3595,14 @@ function App() {
               onChange={(value) => updateSetting('windowHeightM', value)}
             />
             <NumberInput
+              label="窓中心高"
+              value={settings.windowCenterHeightM}
+              min={0.2}
+              step={0.1}
+              unit="m"
+              onChange={(value) => updateSetting('windowCenterHeightM', value)}
+            />
+            <NumberInput
               label="入射角"
               value={settings.incidentAngleDeg}
               min={15}
@@ -1993,10 +3611,16 @@ function App() {
               unit="°"
               onChange={(value) => updateSetting('incidentAngleDeg', value)}
             />
-          </div>
+          </details>
 
-          <div className="control-group">
-            <h3>室内条件</h3>
+          <details className="control-group" open>
+            <summary>
+              <span>室内条件</span>
+              <HelpTip text="窓から屋内へ入った後の距離減衰と、部屋の評価範囲を設定します。" />
+            </summary>
+            <p className="control-group-note">
+              部屋寸法はヒートマップと接続可能面積に、室内距離と受信アンテナ高は代表受信点のRSRPに効きます。
+            </p>
             <NumberInput
               label="部屋幅"
               value={settings.roomWidthM}
@@ -2022,18 +3646,40 @@ function App() {
               onChange={(value) => updateSetting('indoorDistanceM', value)}
             />
             <NumberInput
+              label="受信アンテナ高"
+              value={settings.rxAntennaHeightM}
+              min={0.2}
+              step={0.1}
+              unit="m"
+              onChange={(value) => updateSetting('rxAntennaHeightM', value)}
+            />
+            <NumberInput
               label="屋内伝搬指数"
               value={settings.indoorPathLossExponent}
               min={0.5}
               step={0.1}
               onChange={(value) => updateSetting('indoorPathLossExponent', value)}
             />
-          </div>
+            <NumberInput
+              label="屋内遮蔽損失"
+              value={settings.indoorObstacleLossDb}
+              min={0}
+              step={0.5}
+              unit="dB"
+              onChange={(value) => updateSetting('indoorObstacleLossDb', value)}
+            />
+          </details>
 
-          <div className="control-group">
-            <h3>ナミゲート</h3>
+          <details className="control-group" open>
+            <summary>
+              <span>ナミゲート</span>
+              <HelpTip text="窓あり状態からどれだけ回復できるかを仮定します。実測後は校正候補を反映できます。" />
+            </summary>
+            <p className="control-group-note">
+              ナミゲートの効果は「窓なしとの差をどれだけ埋めたか」で見ます。面積、設置効率、追加損失で現場条件を調整します。
+            </p>
             <label className="control">
-              <span>改善量プリセット</span>
+              <TermLabel label="改善量プリセット" help={HELP_TEXT['改善量プリセット']} />
               <select
                 value={settings.namigatePresetId}
                 onChange={(event) =>
@@ -2137,7 +3783,7 @@ function App() {
               unit="dBm"
               onChange={(value) => updateSetting('connectionThresholdDbm', value)}
             />
-          </div>
+          </details>
         </aside>
 
         <section className="results-panel">
@@ -2159,52 +3805,155 @@ function App() {
             ))}
           </section>
 
-          <section className="metric-grid">
-            <article className="metric-card">
-              <span>窓損失</span>
-              <strong>{formatDb(settings.windowLossDb)}</strong>
-              <small>入射角損失 {formatDb(angleLossDb)}</small>
-            </article>
-            <article className="metric-card">
-              <span>ナミゲート総改善量</span>
-              <strong>{formatDb(totalNamigateGainDb)}</strong>
-              <small>
-                面積 {formatDb(areaGainDb)} / 入射角回復 {formatDb(namigateAngleRecoveryDb)}
-              </small>
-            </article>
-            <article className="metric-card">
-              <span>電力倍率</span>
-              <strong>{formatMultiplier(powerMultiplier)}</strong>
-              <small>窓あり比</small>
-            </article>
-            <article className="metric-card">
-              <span>電界倍率</span>
-              <strong>{formatMultiplier(fieldMultiplier)}</strong>
-              <small>窓あり比</small>
-            </article>
-            <article className="metric-card">
-              <span>窓なし状態への回復率</span>
-              <strong>{numberFormatter.format(clamp(recoveryRate, 0, 100))}%</strong>
-              <small>{formatDb(recoveredGapDb)} 回復</small>
-            </article>
-            <article className="metric-card">
-              <span>実効EIRP</span>
-              <strong>{formatDbm(effectiveEirpDbm)}</strong>
-              <small>
-                詳細 {formatDbm(detailedEirpDbm)} / 受信系 {formatDb(receiverAdjustmentDb)}
-              </small>
-            </article>
-            <article className="metric-card">
-              <span>計算損失</span>
-              <strong>{formatDb(currentFsplDb)}</strong>
-              <small>室内距離損失 {formatDb(currentIndoorLossDb)}</small>
-            </article>
-          </section>
+          <nav className="view-tabs" role="tablist" aria-label="表示切り替え">
+            {VIEW_TABS.map((tab) => (
+              <button
+                aria-selected={activeView === tab.id}
+                className={activeView === tab.id ? 'is-active' : ''}
+                key={tab.id}
+                role="tab"
+                type="button"
+                onClick={() => setActiveView(tab.id)}
+              >
+                <strong>{tab.label}</strong>
+                <span>{tab.description}</span>
+              </button>
+            ))}
+          </nav>
 
-          <section className="measurement-section">
+          {activeView === 'overview' ? (
+            <>
+              <section className="beginner-guide" aria-label="読み方ガイド">
+                <article>
+                  <span>1. まずRSRP</span>
+                  <strong>3状態の差を見る</strong>
+                  <p>
+                    上段の3枚で、窓なし、窓あり、窓あり＋ナミゲートの受信強度を比較します。
+                  </p>
+                </article>
+                <article>
+                  <span>2. 回復率</span>
+                  <strong>窓なしとの差をどれだけ埋めたか</strong>
+                  <p>
+                    ナミゲート効果は、窓損失で落ちた分をどれだけ戻せたかで読みます。
+                  </p>
+                </article>
+                <article>
+                  <span>3. 面積と距離</span>
+                  <strong>現場で使える範囲を見る</strong>
+                  <p>
+                    接続可能面積と最大到達距離で、改善が部屋全体に効くか確認します。
+                  </p>
+                </article>
+              </section>
+
+              <section className="glossary-strip" aria-label="用語の補足">
+                <HelpChip label="RSRP" />
+                <HelpChip label="SINR" />
+                <HelpChip label="RSRQ" />
+                <HelpChip label="RMSE" />
+              </section>
+
+              <section className="metric-grid" aria-label="改善効果の要約">
+                <article className="metric-card" data-metric="窓損失">
+                  <span className="label-with-help">
+                    窓損失
+                    <HelpTip text={HELP_TEXT['窓損失']} />
+                  </span>
+                  <strong>{formatDb(settings.windowLossDb)}</strong>
+                  <small>入射角損失 {formatDb(angleLossDb)}</small>
+                </article>
+                <article className="metric-card" data-metric="ナミゲート総改善量">
+                  <span className="label-with-help">
+                    ナミゲート総改善量
+                    <HelpTip text="改善量、面積補正、入射角回復、設置効率、追加損失、上限をまとめた最終的な上積み量です。" />
+                  </span>
+                  <strong>{formatDb(totalNamigateGainDb)}</strong>
+                  <small>
+                    面積 {formatDb(areaGainDb)} / 入射角回復{' '}
+                    {formatDb(namigateAngleRecoveryDb)}
+                  </small>
+                </article>
+                <article className="metric-card" data-metric="電力倍率">
+                  <span className="label-with-help">
+                    電力倍率
+                    <HelpTip text="窓あり状態に対し、ナミゲートありの受信電力が何倍相当かをdBから換算した値です。" />
+                  </span>
+                  <strong>{formatMultiplier(powerMultiplier)}</strong>
+                  <small>窓あり比</small>
+                </article>
+                <article className="metric-card" data-metric="電界倍率">
+                  <span className="label-with-help">
+                    電界倍率
+                    <HelpTip text="電力倍率を電界強度の倍率に換算した目安です。電界は電力の平方根で増減します。" />
+                  </span>
+                  <strong>{formatMultiplier(fieldMultiplier)}</strong>
+                  <small>窓あり比</small>
+                </article>
+                <article className="metric-card" data-metric="窓なし状態への回復率">
+                  <span className="label-with-help">
+                    窓なし状態への回復率
+                    <HelpTip text="窓ありで落ちた差分に対して、ナミゲートで何%戻ったかを示します。100%なら窓なし相当に届いた扱いです。" />
+                  </span>
+                  <strong>{numberFormatter.format(clamp(recoveryRate, 0, 100))}%</strong>
+                  <small>{formatDb(recoveredGapDb)} 回復</small>
+                </article>
+                <article className="metric-card" data-metric="実効EIRP">
+                  <span className="label-with-help">
+                    実効EIRP
+                    <HelpTip text={HELP_TEXT['EIRP直接入力']} />
+                  </span>
+                  <strong>{formatDbm(effectiveEirpDbm)}</strong>
+                  <small>
+                    詳細 {formatDbm(detailedEirpDbm)} / 受信系{' '}
+                    {formatDb(receiverAdjustmentDb)}
+                  </small>
+                </article>
+                <article className="metric-card" data-metric="計算損失">
+                  <span className="label-with-help">
+                    計算損失
+                    <HelpTip text="屋外自由空間損失と、代表受信点までの室内距離損失を足したリンクバジェット上の損失です。" />
+                  </span>
+                  <strong>{formatDb(currentFsplDb)}</strong>
+                  <small>室内距離損失 {formatDb(currentIndoorLossDb)}</small>
+                </article>
+                <article className="metric-card" data-metric="3Dリンク距離">
+                  <span className="label-with-help">
+                    3Dリンク距離
+                    <HelpTip text="水平距離に送信アンテナ高、窓中心高、受信アンテナ高の差を加味した、計算上の斜距離です。" />
+                  </span>
+                  <strong>{formatMeters(currentOutdoorLinkDistanceM)}</strong>
+                  <small>室内3D {formatMeters(currentIndoorLinkDistanceM)}</small>
+                </article>
+                <article className="metric-card" data-metric="追加損失">
+                  <span className="label-with-help">
+                    追加損失
+                    <HelpTip text="アンテナ指向ずれ、屋外遮蔽、屋内遮蔽を足した、窓損失以外の追加的な悪化量です。" />
+                  </span>
+                  <strong>
+                    {formatDb(
+                      settings.antennaAlignmentLossDb +
+                        settings.outdoorObstructionLossDb +
+                        settings.indoorObstacleLossDb,
+                    )}
+                  </strong>
+                  <small>
+                    指向 {formatDb(settings.antennaAlignmentLossDb)} / 遮蔽{' '}
+                    {formatDb(settings.outdoorObstructionLossDb + settings.indoorObstacleLossDb)}
+                  </small>
+                </article>
+              </section>
+            </>
+          ) : null}
+
+          {activeView === 'measurement' ? (
+            <section className="measurement-section">
             <div className="section-heading">
               <h2>実測値比較</h2>
-              <span>実測 - 推定</span>
+              <span className="label-with-help">
+                実測 - 推定
+                <HelpTip text="正の値なら実測の方が強く、負の値なら推定より弱く測定されています。" />
+              </span>
             </div>
 
             <div className="measurement-body">
@@ -2291,6 +4040,165 @@ function App() {
                 </article>
               </div>
 
+              <div className="csv-import-panel">
+                <div className="subsection-heading">
+                  <h3>CSV実測点取り込み</h3>
+                  <span>
+                    scenario, x_m, y_m, RSRP, RSRQ, SINR, DL/ULを読み込み
+                  </span>
+                </div>
+                <textarea
+                  aria-label="CSV実測データ"
+                  className="csv-textarea"
+                  value={measurementCsvText}
+                  onChange={(event) => setMeasurementCsvText(event.target.value)}
+                  spellCheck={false}
+                />
+                <div className="action-row">
+                  <button
+                    type="button"
+                    onClick={() => handleImportMeasurementCsv()}
+                  >
+                    CSVを取り込み
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeasurementCsvText(SAMPLE_MEASUREMENT_CSV)
+                      handleImportMeasurementCsv(SAMPLE_MEASUREMENT_CSV)
+                    }}
+                  >
+                    サンプルCSVを読み込み
+                  </button>
+                  <label className="file-button">
+                    CSVファイルを選択
+                    <input
+                      accept=".csv,text/csv"
+                      type="file"
+                      onChange={async (event) => {
+                        const file = event.currentTarget.files?.[0]
+
+                        if (!file) {
+                          return
+                        }
+
+                        const text = await file.text()
+                        setMeasurementCsvText(text)
+                        handleImportMeasurementCsv(text)
+                        event.currentTarget.value = ''
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadTextFile(
+                        'namigate_measurements.csv',
+                        buildMeasurementCsv(measurementPoints),
+                        'text/csv',
+                      )
+                    }
+                  >
+                    実測CSVを書き出し
+                  </button>
+                  {importStatus ? <span>{importStatus}</span> : null}
+                </div>
+              </div>
+
+              <div className="measurement-summary">
+                <article>
+                  <span>CSV実測点</span>
+                  <strong>{numberFormatter.format(qualityStats.pointCount)} 点</strong>
+                  <small>ヒートマップ/3Dへ重ね表示</small>
+                </article>
+                <article>
+                  <span>RMSE</span>
+                  <strong>{formatOptionalDb(pointErrorStats.rmseDb)}</strong>
+                  <small>点別 実測 - 推定</small>
+                </article>
+                <article>
+                  <span>接続可能率</span>
+                  <strong>{formatOptionalPercent(qualityStats.connectedRatio)}</strong>
+                  <small>RSRPしきい値判定</small>
+                </article>
+                <article>
+                  <span>平均SINR</span>
+                  <strong>{formatOptionalDb(qualityStats.avgSinrDb)}</strong>
+                  <small>品質指標</small>
+                </article>
+                <article>
+                  <span>平均RSRQ</span>
+                  <strong>{formatOptionalDb(qualityStats.avgRsrqDb)}</strong>
+                  <small>品質指標</small>
+                </article>
+                <article>
+                  <span>平均DL/UL</span>
+                  <strong>
+                    {formatOptionalMbps(qualityStats.avgDlMbps)} /{' '}
+                    {formatOptionalMbps(qualityStats.avgUlMbps)}
+                  </strong>
+                  <small>スループット</small>
+                </article>
+              </div>
+
+              <div
+                className="point-table"
+                role="table"
+                aria-label="CSV実測点ごとの推定誤差"
+              >
+                <div className="point-row is-head" role="row">
+                  <span role="columnheader">点</span>
+                  <span role="columnheader">状態</span>
+                  <span role="columnheader">位置</span>
+                  <span role="columnheader">実測RSRP</span>
+                  <span role="columnheader">推定RSRP</span>
+                  <span role="columnheader">差分</span>
+                  <span role="columnheader">SINR</span>
+                  <span role="columnheader">DL</span>
+                </div>
+                {pointComparisons.length === 0 ? (
+                  <div className="point-row" role="row">
+                    <span role="cell">未入力</span>
+                    <span role="cell">CSVを取り込んでください</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                  </div>
+                ) : (
+                  pointComparisons.slice(0, 12).map((point) => (
+                    <div className="point-row" key={point.id} role="row">
+                      <strong role="cell">{point.name}</strong>
+                      <span role="cell">
+                        {
+                          SCENARIOS.find(
+                            (scenario) => scenario.key === point.scenario,
+                          )?.label
+                        }
+                      </span>
+                      <span role="cell">
+                        x{numberFormatter.format(point.xM)} / y
+                        {numberFormatter.format(point.yM)}
+                      </span>
+                      <strong role="cell">{formatDbm(point.rsrpDbm)}</strong>
+                      <span role="cell">{formatDbm(point.estimatedRsrpDbm)}</span>
+                      <strong
+                        className={
+                          point.residualDb >= 0 ? 'is-positive' : 'is-negative'
+                        }
+                        role="cell"
+                      >
+                        {formatDb(point.residualDb)}
+                      </strong>
+                      <span role="cell">{formatOptionalDb(point.sinrDb)}</span>
+                      <span role="cell">{formatOptionalMbps(point.dlMbps)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
               <div className="analysis-copy-panel">
                 <button type="button" onClick={handleCopyAnalysis}>
                   AI分析用データをコピー
@@ -2298,29 +4206,300 @@ function App() {
                 {copyStatus ? <span>{copyStatus}</span> : null}
               </div>
             </div>
-          </section>
+            </section>
+          ) : null}
 
-          <section className="position-section">
+          {activeView === 'analysis' ? (
+            <section className="experiment-section">
+            <div className="section-heading">
+              <h2>実証試験分析</h2>
+              <span className="label-with-help">
+                校正・感度・信頼ケース・レポート
+                <HelpTip text="実測点からモデルを現場寄りに合わせ、条件が変わったときの影響と報告用テキストを確認します。" />
+              </span>
+            </div>
+
+            <div className="experiment-body">
+              <div className="analysis-card-grid">
+                <article>
+                  <span>推奨 窓損失</span>
+                  <strong>{formatDb(calibrationResult.recommendedWindowLossDb)}</strong>
+                  <small>データ源: {calibrationResult.source}</small>
+                </article>
+                <article>
+                  <span>推奨 屋内伝搬指数</span>
+                  <strong>
+                    {numberFormatter.format(
+                      calibrationResult.recommendedIndoorPathLossExponent,
+                    )}
+                  </strong>
+                  <small>noWindow実測点から探索</small>
+                </article>
+                <article>
+                  <span>推奨 ナミゲート改善量</span>
+                  <strong>{formatDb(calibrationResult.recommendedNamigateGainDb)}</strong>
+                  <small>
+                    総改善 {formatDb(calibrationResult.recommendedTotalNamigateGainDb)}
+                  </small>
+                </article>
+                <article>
+                  <span>校正前/後 RMSE</span>
+                  <strong>
+                    {formatOptionalDb(calibrationResult.beforeRmseDb)} /{' '}
+                    {formatOptionalDb(calibrationResult.afterRmseDb)}
+                  </strong>
+                  <small>CSV実測点ベース</small>
+                </article>
+              </div>
+
+              <div className="action-row">
+                <button type="button" onClick={handleApplyCalibration}>
+                  校正候補を入力へ反映
+                </button>
+                <button type="button" onClick={handleCopyExperimentReport}>
+                  実証レポートをコピー
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    downloadTextFile(
+                      'namigate_experiment_report.md',
+                      experimentReportText,
+                    )
+                  }
+                >
+                  Markdownを保存
+                </button>
+                {copyStatus ? <span>{copyStatus}</span> : null}
+              </div>
+
+              <div className="analysis-table-grid">
+                <div className="compact-table">
+                  <div className="subsection-heading">
+                    <h3>感度分析</h3>
+                    <span>窓あり＋ナミゲートの変動</span>
+                  </div>
+                  <div className="compact-row is-head">
+                    <span>条件</span>
+                    <span>RSRP</span>
+                    <span>差分</span>
+                    <span>面積</span>
+                  </div>
+                  {sensitivityRows.map((row) => (
+                    <div className="compact-row" key={row.label}>
+                      <strong>{row.label}</strong>
+                      <span>{formatDbm(row.rsrpDbm)}</span>
+                      <span>{formatDb(row.deltaRsrpDb)}</span>
+                      <span>{formatArea(row.connectedAreaM2)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="compact-table">
+                  <div className="subsection-heading">
+                    <h3>信頼ケース</h3>
+                    <span>保守/標準/楽観</span>
+                  </div>
+                  <div className="compact-row is-head">
+                    <span>ケース</span>
+                    <span>RSRP</span>
+                    <span>面積</span>
+                    <span>到達</span>
+                  </div>
+                  {confidenceRows.map((row) => (
+                    <div className="compact-row" key={row.label}>
+                      <strong>{row.label}</strong>
+                      <span>{formatDbm(row.rsrpDbm)}</span>
+                      <span>{formatArea(row.connectedAreaM2)}</span>
+                      <span>{formatMeters(row.maxReachM)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="protocol-panel">
+                <div className="subsection-heading">
+                  <h3>測定プロトコル</h3>
+                  <span>実証条件の再現性を記録</span>
+                </div>
+                <div className="protocol-grid">
+                  <label className="control">
+                    <span>試験場所</span>
+                    <input
+                      value={protocol.siteName}
+                      onChange={(event) =>
+                        updateProtocol('siteName', event.target.value)
+                      }
+                      placeholder="例: 工場A 2F"
+                    />
+                  </label>
+                  <label className="control">
+                    <span>測定者</span>
+                    <input
+                      value={protocol.operatorName}
+                      onChange={(event) =>
+                        updateProtocol('operatorName', event.target.value)
+                      }
+                      placeholder="担当者"
+                    />
+                  </label>
+                  <label className="control">
+                    <span>端末/測定器</span>
+                    <input
+                      value={protocol.deviceName}
+                      onChange={(event) =>
+                        updateProtocol('deviceName', event.target.value)
+                      }
+                      placeholder="UE/測定器名"
+                    />
+                  </label>
+                  <NumberInput
+                    label="測定高さ"
+                    value={protocol.measurementHeightM}
+                    min={0.2}
+                    step={0.1}
+                    unit="m"
+                    onChange={(value) => updateProtocol('measurementHeightM', value)}
+                  />
+                  <NumberInput
+                    label="平均化時間"
+                    value={protocol.averagingSeconds}
+                    min={1}
+                    step={1}
+                    unit="秒"
+                    onChange={(value) => updateProtocol('averagingSeconds', value)}
+                  />
+                  <NumberInput
+                    label="サンプル数/点"
+                    value={protocol.samplesPerPoint}
+                    min={1}
+                    step={1}
+                    onChange={(value) => updateProtocol('samplesPerPoint', value)}
+                  />
+                  <label className="control">
+                    <span>端末/アンテナ向き</span>
+                    <input
+                      value={protocol.antennaDirection}
+                      onChange={(event) =>
+                        updateProtocol('antennaDirection', event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="control">
+                    <span>天候・環境</span>
+                    <input
+                      value={protocol.weather}
+                      onChange={(event) =>
+                        updateProtocol('weather', event.target.value)
+                      }
+                      placeholder="屋外天候/人流/遮蔽物"
+                    />
+                  </label>
+                </div>
+                <div className="checklist-grid">
+                  {Object.entries(PROTOCOL_CHECKLIST_LABELS).map(([key, label]) => (
+                    <label className="checklist-item" key={key}>
+                      <input
+                        checked={protocol.checklist[key as ProtocolChecklistKey]}
+                        type="checkbox"
+                        onChange={(event) =>
+                          updateProtocolChecklist(
+                            key as ProtocolChecklistKey,
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="control">
+                  <span>備考</span>
+                  <textarea
+                    className="protocol-notes"
+                    value={protocol.notes}
+                    onChange={(event) => updateProtocol('notes', event.target.value)}
+                    placeholder="測定時の気づき、遮蔽物、端末固定方法など"
+                  />
+                </label>
+              </div>
+
+              <div className="case-panel">
+                <div className="subsection-heading">
+                  <h3>試験ケース保存</h3>
+                  <span>ブラウザ内に最大12件保存</span>
+                </div>
+                <div className="case-controls">
+                  <label className="control">
+                    <span>ケース名</span>
+                    <input
+                      value={caseName}
+                      onChange={(event) => setCaseName(event.target.value)}
+                      placeholder="Low-E窓 ナミゲート20cm 室内8m"
+                    />
+                  </label>
+                  <label className="control">
+                    <span>保存済みケース</span>
+                    <select
+                      value={selectedCaseId}
+                      onChange={(event) => setSelectedCaseId(event.target.value)}
+                    >
+                      <option value="">選択してください</option>
+                      {savedCases.map((savedCase) => (
+                        <option key={savedCase.id} value={savedCase.id}>
+                          {savedCase.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="action-row">
+                    <button type="button" onClick={handleSaveCase}>
+                      保存
+                    </button>
+                    <button type="button" onClick={handleLoadCase}>
+                      読み込み
+                    </button>
+                    <button type="button" onClick={handleDeleteCase}>
+                      削除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </section>
+          ) : null}
+
+          {activeView === 'visualization' ? (
+            <section className="position-section">
             <div className="section-heading">
               <h2>送信機・窓・受信機の3D位置関係</h2>
-              <span>入力条件に連動した3Dビュー</span>
+              <span className="label-with-help">
+                入力条件に連動した3Dビュー
+                <HelpTip text="屋外距離、窓サイズ、ナミゲートサイズ、室内距離、実測点を同じ座標感で確認できます。" />
+              </span>
             </div>
             <PositionScene3D
               settings={settings}
               angleLossDb={angleLossDb}
               areaGainDb={areaGainDb}
+              measurementPoints={measurementPoints}
             />
             <PositionDiagram
               settings={settings}
               angleLossDb={angleLossDb}
               areaGainDb={areaGainDb}
             />
-          </section>
+            </section>
+          ) : null}
 
-          <section className="coverage-section">
+          {activeView === 'overview' ? (
+            <section className="coverage-section">
             <div className="section-heading">
               <h2>接続可能面積と最大到達距離</h2>
-              <span>部屋面積 {formatArea(roomAreaM2)}</span>
+              <span className="label-with-help">
+                部屋面積 {formatArea(roomAreaM2)}
+                <HelpTip text="RSRPが接続しきい値以上になる室内面積と、窓から奥方向へ届く最大距離です。" />
+              </span>
             </div>
             <div className="coverage-grid">
               {scenarioResults.map((scenario) => (
@@ -2331,12 +4510,17 @@ function App() {
                 </article>
               ))}
             </div>
-          </section>
+            </section>
+          ) : null}
 
-          <section className="heatmap-section">
+          {activeView === 'visualization' ? (
+            <section className="heatmap-section">
             <div className="section-heading">
               <h2>室内ヒートマップ</h2>
-              <span>RSRP / しきい値 {formatDbm(settings.connectionThresholdDbm)}</span>
+              <span className="label-with-help">
+                RSRP / しきい値 {formatDbm(settings.connectionThresholdDbm)}
+                <HelpTip text="色が明るいほど受信が強く、実測点を取り込むと推定とのズレを重ねて確認できます。" />
+              </span>
             </div>
             <div className="heatmap-grid">
               {SCENARIOS.map((scenario) => (
@@ -2349,13 +4533,16 @@ function App() {
                     settings={settings}
                     scenario={scenario}
                     heatmap={heatmaps[scenario.key]}
+                    measurementPoints={measurementPoints}
                   />
                 </article>
               ))}
             </div>
-          </section>
+            </section>
+          ) : null}
 
-          <section className="chart-grid">
+          {activeView === 'charts' ? (
+            <section className="chart-grid">
             <article className="chart-card">
               <h2>3状態比較</h2>
               <ResponsiveContainer width="100%" height={260}>
@@ -2469,7 +4656,8 @@ function App() {
                 </LineChart>
               </ResponsiveContainer>
             </article>
-          </section>
+            </section>
+          ) : null}
         </section>
       </section>
 

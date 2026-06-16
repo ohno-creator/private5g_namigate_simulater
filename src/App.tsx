@@ -26,6 +26,12 @@ type WindowPresetId =
 
 type NamigatePresetId = 'conservative' | 'standard' | 'lowEExample' | 'custom'
 type EirpMode = 'direct' | 'detailed'
+type OutdoorModelId =
+  | 'fspl'
+  | 'hataUrbanSmall'
+  | 'hataUrbanLarge'
+  | 'hataSuburban'
+  | 'hataOpen'
 type ScenarioKey = 'noWindow' | 'withWindow' | 'withNamigate'
 type ActiveView = 'overview' | 'measurement' | 'analysis' | 'visualization' | 'charts'
 type ModulePresetId =
@@ -53,6 +59,7 @@ type Settings = {
   antennaAlignmentLossDb: number
   polarizationLossDb: number
   fadeMarginDb: number
+  outdoorModelId: OutdoorModelId
   outdoorDistanceM: number
   outdoorObstructionLossDb: number
   windowPresetId: WindowPresetId
@@ -248,6 +255,45 @@ const NAMIGATE_PRESETS: {
   { id: 'lowEExample', label: 'Low-E改善例', gainDb: 25 },
   { id: 'custom', label: '任意', gainDb: null },
 ]
+
+const OUTDOOR_MODEL_PRESETS: {
+  id: OutdoorModelId
+  label: string
+  description: string
+}[] = [
+  {
+    id: 'fspl',
+    label: '自由空間損失（FSPL）',
+    description: '見通しのよい屋外区間を、周波数と3D距離だけで評価します。',
+  },
+  {
+    id: 'hataUrbanSmall',
+    label: '奥村-秦 都市（中小都市）',
+    description: '市街地のマクロセル相当を、移動局補正込みで見積もります。',
+  },
+  {
+    id: 'hataUrbanLarge',
+    label: '奥村-秦 都市（大都市）',
+    description: '大都市環境の移動局補正を使う奥村-秦モデルです。',
+  },
+  {
+    id: 'hataSuburban',
+    label: '奥村-秦 郊外',
+    description: '都市モデルから郊外補正を差し引いたプリセットです。',
+  },
+  {
+    id: 'hataOpen',
+    label: '奥村-秦 開放地',
+    description: '開放地/田園地に近い条件の補正を使うプリセットです。',
+  },
+]
+
+const HATA_MODEL_IDS = new Set<OutdoorModelId>([
+  'hataUrbanSmall',
+  'hataUrbanLarge',
+  'hataSuburban',
+  'hataOpen',
+])
 
 const MODULE_PRESETS: {
   id: ModulePresetId
@@ -453,7 +499,7 @@ const HELP_TEXT: Record<string, string> = {
   RMSE:
     '推定と実測のズレを二乗平均平方根で表した値です。小さいほどモデルが現場に合っています。',
   '無線機プリセット': '汎用的な基地局・通信モジュール構成の初期値です。メーカー仕様や免許条件を保証するものではありません。',
-  '周波数': '電波の周波数です。FSPL計算に使い、高い周波数ほど自由空間損失が大きくなります。',
+  '周波数': '電波の周波数です。FSPLや奥村-秦モデルの屋外損失計算に使い、高い周波数ほど損失が大きくなります。',
   'EIRP計算方式': 'EIRPを直接入れるか、送信出力やアンテナ利得から計算するかを選びます。',
   'EIRP直接入力': '送信出力、アンテナ利得、給電損失をまとめた実効的な送信電力です。免許条件上のEIRP制限とは別に、正式判断は最新の総務省資料で確認してください。',
   '送信出力': '無線機から出る空中線電力相当の入力値です。詳細EIRP計算方式のときに使い、法規制上は無線局免許・技術基準の確認対象になります。',
@@ -468,7 +514,8 @@ const HELP_TEXT: Record<string, string> = {
   'アンテナ指向ずれ損失': '送受信アンテナの方位・チルト・ビーム方向が理想から外れる分を追加損失として見込みます。',
   '偏波不整合損失': '送受信アンテナの偏波向きがずれることで発生する損失です。',
   'フェージングマージン': '反射や人体遮蔽などのばらつきを保守的に見込む余裕です。',
-  '屋外距離': '送信機から窓面までの水平距離です。送信アンテナ高と窓中心高を加味してFSPL用の3D斜距離へ変換します。',
+  '屋外伝搬モデル': '送信機から窓までの屋外区間をどう見積もるかを選びます。FSPLは見通し基準、奥村-秦は市街地/郊外/開放地の経験式です。',
+  '屋外距離': '送信機から窓面までの水平距離です。送信アンテナ高と窓中心高を加味して屋外3D斜距離へ変換します。',
   '屋外遮蔽損失': '屋外側の樹木、車両、仮設物、見通し悪化などを追加損失として見込む値です。',
   '地面反射補正': '地面反射などで強め/弱めに見込む補正値です。まず0dBから始めます。',
   '窓種別': '代表的な窓損失をプリセットから選べます。実測に合わせる場合は窓損失を直接変更します。',
@@ -523,6 +570,7 @@ const DEFAULT_SETTINGS: Settings = {
   antennaAlignmentLossDb: 0,
   polarizationLossDb: 0,
   fadeMarginDb: 0,
+  outdoorModelId: 'fspl',
   outdoorDistanceM: 100,
   outdoorObstructionLossDb: 0,
   windowPresetId: 'lowE',
@@ -792,6 +840,17 @@ function calculateFsplDb(frequencyMHz: number, distanceM: number) {
   return 32.44 + 20 * log10(safeFrequencyMHz) + 20 * log10(safeDistanceKm)
 }
 
+function isHataModel(modelId: OutdoorModelId) {
+  return HATA_MODEL_IDS.has(modelId)
+}
+
+function getOutdoorModelLabel(modelId: OutdoorModelId) {
+  return (
+    OUTDOOR_MODEL_PRESETS.find((preset) => preset.id === modelId)?.label ??
+    '自由空間損失（FSPL）'
+  )
+}
+
 function calculateOutdoorLinkDistanceM(settings: Settings) {
   return Math.max(
     Math.hypot(
@@ -800,6 +859,125 @@ function calculateOutdoorLinkDistanceM(settings: Settings) {
     ),
     1,
   )
+}
+
+function calculateHataMobileCorrectionDb(
+  frequencyMHz: number,
+  mobileHeightM: number,
+  citySize: 'small' | 'large',
+) {
+  const safeFrequencyMHz = Math.max(frequencyMHz, 1)
+  const safeMobileHeightM = Math.max(mobileHeightM, 0.1)
+  const logFrequency = log10(safeFrequencyMHz)
+
+  if (citySize === 'large') {
+    if (safeFrequencyMHz <= 200) {
+      return 8.29 * Math.pow(log10(1.54 * safeMobileHeightM), 2) - 1.1
+    }
+
+    return 3.2 * Math.pow(log10(11.75 * safeMobileHeightM), 2) - 4.97
+  }
+
+  return (
+    (1.1 * logFrequency - 0.7) * safeMobileHeightM -
+    (1.56 * logFrequency - 0.8)
+  )
+}
+
+function calculateHataUrbanLossDb(
+  settings: Settings,
+  citySize: 'small' | 'large',
+) {
+  const frequencyMHz = Math.max(settings.frequencyMHz, 1)
+  const baseHeightM = Math.max(settings.txAntennaHeightM, 0.1)
+  const mobileHeightM = Math.max(settings.rxAntennaHeightM, 0.1)
+  const distanceKm = Math.max(calculateOutdoorLinkDistanceM(settings) / 1000, 0.001)
+  const logFrequency = log10(frequencyMHz)
+  const logBaseHeight = log10(baseHeightM)
+  const mobileCorrectionDb = calculateHataMobileCorrectionDb(
+    frequencyMHz,
+    mobileHeightM,
+    citySize,
+  )
+
+  return (
+    69.55 +
+    26.16 * logFrequency -
+    13.82 * logBaseHeight -
+    mobileCorrectionDb +
+    (44.9 - 6.55 * logBaseHeight) * log10(distanceKm)
+  )
+}
+
+function calculateHataPathLossDb(settings: Settings) {
+  const urbanSmallDb = calculateHataUrbanLossDb(settings, 'small')
+  const urbanLargeDb = calculateHataUrbanLossDb(settings, 'large')
+  const logFrequency = log10(Math.max(settings.frequencyMHz, 1))
+
+  if (settings.outdoorModelId === 'hataUrbanLarge') {
+    return urbanLargeDb
+  }
+
+  if (settings.outdoorModelId === 'hataSuburban') {
+    return urbanSmallDb - 2 * Math.pow(log10(settings.frequencyMHz / 28), 2) - 5.4
+  }
+
+  if (settings.outdoorModelId === 'hataOpen') {
+    return urbanSmallDb - 4.78 * Math.pow(logFrequency, 2) + 18.33 * logFrequency - 40.94
+  }
+
+  return urbanSmallDb
+}
+
+function calculateOutdoorPathLossDb(settings: Settings) {
+  if (isHataModel(settings.outdoorModelId)) {
+    return calculateHataPathLossDb(settings)
+  }
+
+  return calculateFsplDb(settings.frequencyMHz, calculateOutdoorLinkDistanceM(settings))
+}
+
+function getHataValidityMessages(settings: Settings) {
+  if (!isHataModel(settings.outdoorModelId)) {
+    return []
+  }
+
+  const messages: string[] = []
+  const outdoorDistanceKm = calculateOutdoorLinkDistanceM(settings) / 1000
+
+  if (settings.frequencyMHz < 150 || settings.frequencyMHz > 1500) {
+    messages.push('周波数150-1500MHz外')
+  }
+
+  if (outdoorDistanceKm < 1 || outdoorDistanceKm > 20) {
+    messages.push('屋外距離1-20km外')
+  }
+
+  if (settings.txAntennaHeightM < 30 || settings.txAntennaHeightM > 200) {
+    messages.push('送信アンテナ高30-200m外')
+  }
+
+  if (settings.rxAntennaHeightM < 1 || settings.rxAntennaHeightM > 10) {
+    messages.push('受信アンテナ高1-10m外')
+  }
+
+  return messages
+}
+
+function getOutdoorModelNotice(settings: Settings) {
+  if (!isHataModel(settings.outdoorModelId)) {
+    return 'FSPLは見通し基準の単純モデルです。市街地の回折・建物群・地形による追加損失は、屋外遮蔽損失や実測校正で見込んでください。'
+  }
+
+  const validityMessages = getHataValidityMessages(settings)
+  const baseText =
+    '奥村-秦モデルは、周波数150-1500MHz、距離1-20km、基地局高30-200m、移動局高1-10m程度を前提にした経験式です。'
+
+  if (validityMessages.length === 0) {
+    return `${baseText} 現在の入力は代表的な適用範囲内です。`
+  }
+
+  return `${baseText} 現在は適用範囲外: ${validityMessages.join('、')}。ローカル5GのSub6/ミリ波では比較用プリセットとして扱い、実測で校正してください。`
 }
 
 function calculateIndoorLinkDistanceM(
@@ -945,10 +1123,7 @@ function calculateRsrpDbm(
   indoorDistanceM = settings.indoorDistanceM,
   receiverHeightM = settings.rxAntennaHeightM,
 ) {
-  const fsplDb = calculateFsplDb(
-    settings.frequencyMHz,
-    calculateOutdoorLinkDistanceM(settings),
-  )
+  const outdoorPathLossDb = calculateOutdoorPathLossDb(settings)
   const indoorLossDb = calculateIndoorLossDb(
     calculateIndoorLinkDistanceM(settings, indoorDistanceM, receiverHeightM),
     settings.indoorPathLossExponent,
@@ -959,25 +1134,22 @@ function calculateRsrpDbm(
     calculateReceiverAdjustmentDb(settings) +
     settings.groundReflectionDb -
     settings.outdoorObstructionLossDb -
-    fsplDb -
-    indoorLossDb +
-    - settings.indoorObstacleLossDb +
+    outdoorPathLossDb -
+    indoorLossDb -
+    settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
   )
 }
 
 function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
-  const fsplDb = calculateFsplDb(
-    settings.frequencyMHz,
-    calculateOutdoorLinkDistanceM(settings),
-  )
+  const outdoorPathLossDb = calculateOutdoorPathLossDb(settings)
   const beforeIndoorLossDb =
     calculateEffectiveEirpDbm(settings) +
     calculateReceiverAdjustmentDb(settings) +
     settings.groundReflectionDb -
     settings.outdoorObstructionLossDb -
-    fsplDb +
-    - settings.indoorObstacleLossDb +
+    outdoorPathLossDb -
+    settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
 
   if (beforeIndoorLossDb < settings.connectionThresholdDbm) {
@@ -1524,6 +1696,9 @@ function buildExperimentReport({
 	    '## 入力モデル',
 	    `- 無線機プリセット: ${getModulePresetLabel(settings.modulePresetId)}`,
 	    `- 周波数: ${numberFormatter.format(settings.frequencyMHz)} MHz`,
+	    `- 屋外伝搬モデル: ${getOutdoorModelLabel(settings.outdoorModelId)}`,
+	    `- 屋外伝搬損失: ${formatDb(calculateOutdoorPathLossDb(settings))}`,
+	    `- 屋外伝搬モデルメモ: ${getOutdoorModelNotice(settings)}`,
 	    `- 実効EIRP: ${formatDbm(calculateEffectiveEirpDbm(settings))}`,
 	    `- 屋外水平距離: ${formatMeters(settings.outdoorDistanceM)}`,
 	    `- 屋外3D距離: ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`,
@@ -1654,6 +1829,9 @@ function buildAiAnalysisText({
 	    '## 入力条件',
 	    `- 無線機プリセット: ${getModulePresetLabel(settings.modulePresetId)}`,
 	    `- 周波数: ${numberFormatter.format(settings.frequencyMHz)} MHz`,
+	    `- 屋外伝搬モデル: ${getOutdoorModelLabel(settings.outdoorModelId)}`,
+	    `- 屋外伝搬損失: ${formatDb(calculateOutdoorPathLossDb(settings))}`,
+	    `- 屋外伝搬モデルメモ: ${getOutdoorModelNotice(settings)}`,
     `- EIRP計算方式: ${settings.eirpMode === 'direct' ? '直接入力' : '無線機詳細から計算'}`,
     `- 実効EIRP: ${formatDbm(effectiveEirpDbm)}`,
     `- EIRP直接入力: ${formatDbm(settings.eirpDbm)}`,
@@ -2831,10 +3009,12 @@ function App() {
     [settings],
   )
 
-  const currentFsplDb = useMemo(
-    () => calculateFsplDb(settings.frequencyMHz, currentOutdoorLinkDistanceM),
-    [currentOutdoorLinkDistanceM, settings.frequencyMHz],
+  const currentOutdoorPathLossDb = useMemo(
+    () => calculateOutdoorPathLossDb(settings),
+    [settings],
   )
+
+  const outdoorModelNotice = useMemo(() => getOutdoorModelNotice(settings), [settings])
 
   const currentIndoorLossDb = useMemo(
     () =>
@@ -3527,6 +3707,28 @@ function App() {
               unit="m"
               onChange={(value) => updateSetting('outdoorDistanceM', value)}
             />
+            <label className="control">
+              <TermLabel
+                label="屋外伝搬モデル"
+                help={HELP_TEXT['屋外伝搬モデル']}
+              />
+              <select
+                value={settings.outdoorModelId}
+                onChange={(event) =>
+                  updateSetting('outdoorModelId', event.target.value as OutdoorModelId)
+                }
+              >
+                {OUTDOOR_MODEL_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="model-note propagation-note">
+              <strong>{getOutdoorModelLabel(settings.outdoorModelId)}</strong>
+              <span>{outdoorModelNotice}</span>
+            </div>
             <NumberInput
               label="屋外遮蔽損失"
               value={settings.outdoorObstructionLossDb}
@@ -3912,10 +4114,13 @@ function App() {
                 <article className="metric-card" data-metric="計算損失">
                   <span className="label-with-help">
                     計算損失
-                    <HelpTip text="屋外自由空間損失と、代表受信点までの室内距離損失を足したリンクバジェット上の損失です。" />
+                    <HelpTip text="選択した屋外伝搬モデルの損失と、代表受信点までの室内距離損失を表示します。" />
                   </span>
-                  <strong>{formatDb(currentFsplDb)}</strong>
-                  <small>室内距離損失 {formatDb(currentIndoorLossDb)}</small>
+                  <strong>{formatDb(currentOutdoorPathLossDb)}</strong>
+                  <small>
+                    {getOutdoorModelLabel(settings.outdoorModelId)} / 室内{' '}
+                    {formatDb(currentIndoorLossDb)}
+                  </small>
                 </article>
                 <article className="metric-card" data-metric="3Dリンク距離">
                   <span className="label-with-help">

@@ -892,7 +892,8 @@
 }
 
 .theory-input-panel,
-.field-effect-panel {
+.field-effect-panel,
+.field-aid-panel {
   display: grid;
   gap: 12px;
   padding: 13px;
@@ -1125,6 +1126,60 @@
 .effect-row > small {
   color: #526271;
   font-weight: 650;
+}
+
+.field-aid-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.field-aid-card {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid #d8e2ea;
+  border-left: 4px solid #6f7f8d;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.field-aid-card.is-ok {
+  border-left-color: #15845d;
+}
+
+.field-aid-card.is-warn {
+  border-left-color: #c96c34;
+}
+
+.field-aid-card.is-risk {
+  border-left-color: #ba3b35;
+}
+
+.field-aid-card.is-info {
+  border-left-color: #0071bd;
+}
+
+.field-aid-card span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
+.field-aid-card strong {
+  color: #101820;
+  font-size: 18px;
+  line-height: 1.08;
+}
+
+.field-aid-card small {
+  color: #657380;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .effect-row > span::before,
@@ -2086,6 +2141,7 @@
   .protocol-grid,
   .case-controls,
   .checklist-grid,
+  .field-aid-grid,
   .column-list,
   .evidence-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2131,6 +2187,7 @@
   .protocol-mini-grid,
   .case-controls,
   .checklist-grid,
+  .field-aid-grid,
   .column-list,
   .position-3d-facts,
   .position-facts,

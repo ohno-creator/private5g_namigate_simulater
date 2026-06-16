@@ -161,6 +161,16 @@ type EffectSummaryRow = {
   memo: string
 }
 
+type FieldAidStatus = 'ok' | 'warn' | 'risk' | 'info'
+
+type FieldAidItem = {
+  id: string
+  label: string
+  value: string
+  status: FieldAidStatus
+  memo: string
+}
+
 type HeatmapPlanProps = {
   settings: Settings
   scenario: ScenarioDefinition
@@ -1703,6 +1713,10 @@ function recoveryPercentNullable(
   return (recoveredDb / gapDb) * 100
 }
 
+function formatRecordRatio(recorded: number, total: number) {
+  return total === 0 ? '0/0' : `${numberFormatter.format(recorded)}/${numberFormatter.format(total)}`
+}
+
 function calculateQualityStats(
   points: MeasurementPoint[],
   thresholdDbm: number,
@@ -1857,6 +1871,294 @@ function calculateCalibrationResult(
     beforeRmseDb: beforeStats.rmseDb,
     afterRmseDb: afterStats.rmseDb,
   }
+}
+
+function buildFieldAidItems({
+  settings,
+  protocol,
+  measuredComparisons,
+  theoryComparisons,
+  pointComparisons,
+  pointErrorStats,
+  qualityStats,
+  measuredAverageResidualDb,
+  measuredVsTheoryAverageGapDb,
+  measuredWindowLossDb,
+  measuredGlassOnlyLossDb,
+  angleLossDb,
+  measuredNamigateGainDb,
+  measuredNamigateGapDb,
+  measuredRecoveryRate,
+}: {
+  settings: Settings
+  protocol: TestProtocol
+  measuredComparisons: MeasuredComparison[]
+  theoryComparisons: TheoryComparison[]
+  pointComparisons: PointComparison[]
+  pointErrorStats: ErrorStats
+  qualityStats: QualityStats
+  measuredAverageResidualDb: number | null
+  measuredVsTheoryAverageGapDb: number | null
+  measuredWindowLossDb: number | null
+  measuredGlassOnlyLossDb: number | null
+  angleLossDb: number
+  measuredNamigateGainDb: number | null
+  measuredNamigateGapDb: number | null
+  measuredRecoveryRate: number | null
+}) {
+  const manualMeasuredCount = measuredComparisons.filter(
+    (comparison) => comparison.measuredRsrpDbm !== null,
+  ).length
+  const theoryCount = theoryComparisons.filter(
+    (comparison) => comparison.theoryRsrpDbm !== null,
+  ).length
+  const pointCountByScenario = SCENARIOS.reduce(
+    (accumulator, scenario) => ({
+      ...accumulator,
+      [scenario.key]: pointComparisons.filter(
+        (point) => point.scenario === scenario.key,
+      ).length,
+    }),
+    {} as Record<ScenarioKey, number>,
+  )
+  const minScenarioPointCount = Math.min(...Object.values(pointCountByScenario))
+  const checklistCount = Object.values(protocol.checklist).filter(Boolean).length
+  const fixedConditionCount = [
+    protocol.checklist.sameDevice,
+    protocol.checklist.sameHeight,
+    protocol.checklist.sameAntennaDirection,
+    protocol.checklist.fixedWindowPosition,
+  ].filter(Boolean).length
+  const maxMeasuredY = pointComparisons.reduce(
+    (maxValue, point) => Math.max(maxValue, point.yM),
+    0,
+  )
+  const depthCoveragePercent =
+    pointComparisons.length === 0
+      ? null
+      : (maxMeasuredY / Math.max(settings.roomDepthM, 1)) * 100
+  const sinrRecordedCount = pointComparisons.filter((point) => point.sinrDb !== null).length
+  const throughputRecordedCount = pointComparisons.filter(
+    (point) => point.dlMbps !== null || point.ulMbps !== null,
+  ).length
+  const connectedRatioText = formatOptionalPercent(qualityStats.connectedRatio)
+  const maxAbsResidualDb = pointErrorStats.maxAbsDb
+  const sampleStatus: FieldAidStatus =
+    protocol.observationCount >= 30 ? 'ok' : protocol.observationCount >= 10 ? 'warn' : 'risk'
+  const averagingStatus: FieldAidStatus =
+    protocol.averagingSeconds >= 30 ? 'ok' : protocol.averagingSeconds >= 10 ? 'warn' : 'risk'
+  const residualStatus: FieldAidStatus =
+    measuredAverageResidualDb === null
+      ? 'info'
+      : Math.abs(measuredAverageResidualDb) <= 3
+        ? 'ok'
+        : Math.abs(measuredAverageResidualDb) <= 8
+          ? 'warn'
+          : 'risk'
+  const rmseStatus: FieldAidStatus =
+    pointErrorStats.rmseDb === null
+      ? 'info'
+      : pointErrorStats.rmseDb <= 4
+        ? 'ok'
+        : pointErrorStats.rmseDb <= 8
+          ? 'warn'
+          : 'risk'
+
+  return [
+    {
+      id: 'manual-three-state',
+      label: '1. 3状態の手入力',
+      value: `${manualMeasuredCount}/3`,
+      status: manualMeasuredCount === 3 ? 'ok' : manualMeasuredCount > 0 ? 'warn' : 'risk',
+      memo: '窓開放相当、窓閉鎖、窓閉鎖＋ナミゲートを同一点で揃えると、dB差分を直接読めます。',
+    },
+    {
+      id: 'theory-three-state',
+      label: '2. 外部理論値',
+      value: `${theoryCount}/3`,
+      status: theoryCount === 3 ? 'ok' : theoryCount > 0 ? 'warn' : 'info',
+      memo: '外部計算値を3状態で入れると、実測-理論、推定-理論のズレを分離できます。',
+    },
+    {
+      id: 'csv-point-count',
+      label: '3. CSV実測点数',
+      value: `${numberFormatter.format(pointComparisons.length)}点`,
+      status: pointComparisons.length >= 9 ? 'ok' : pointComparisons.length >= 3 ? 'warn' : 'info',
+      memo: `代表点だけでなく複数点を入れると、室内の場所依存と外れ値が見えます。接続可能率 ${connectedRatioText}。`,
+    },
+    {
+      id: 'scenario-balance',
+      label: '4. 状態別点数バランス',
+      value: `開${pointCountByScenario.noWindow}/閉${pointCountByScenario.withWindow}/NG${pointCountByScenario.withNamigate}`,
+      status: minScenarioPointCount >= 3 ? 'ok' : minScenarioPointCount >= 1 ? 'warn' : 'risk',
+      memo: '各状態で同じ測定点数に近づけると、窓とナミゲートの寄与比較が安定します。',
+    },
+    {
+      id: 'observation-count',
+      label: '5. 観測N数',
+      value: `N=${numberFormatter.format(protocol.observationCount)}`,
+      status: sampleStatus,
+      memo: 'N=30以上なら比較評価の説明がしやすく、N=1は瞬間確認として扱います。',
+    },
+    {
+      id: 'averaging-time',
+      label: '6. 平均化時間',
+      value: `${numberFormatter.format(protocol.averagingSeconds)}秒`,
+      status: averagingStatus,
+      memo: '静的評価は30秒程度を目安にし、人流がある場合は時間帯を分けます。',
+    },
+    {
+      id: 'checklist-completion',
+      label: '7. 測定条件チェック',
+      value: `${checklistCount}/6`,
+      status: checklistCount >= 5 ? 'ok' : checklistCount >= 3 ? 'warn' : 'risk',
+      memo: '端末、測定高、向き、環境記録が揃うほど再現性を説明できます。',
+    },
+    {
+      id: 'fixed-condition',
+      label: '8. 同一条件固定',
+      value: `${fixedConditionCount}/4`,
+      status: fixedConditionCount === 4 ? 'ok' : fixedConditionCount >= 2 ? 'warn' : 'risk',
+      memo: '3状態比較では端末、測定高、向き、窓/ナミゲート位置を固定します。',
+    },
+    {
+      id: 'measured-window-loss',
+      label: '9. 実測窓損失',
+      value: formatOptionalDb(measuredWindowLossDb),
+      status: measuredWindowLossDb === null ? 'info' : measuredWindowLossDb >= 0 ? 'ok' : 'risk',
+      memo: '窓開放相当と窓閉鎖の差です。負値なら測定条件のずれを確認します。',
+    },
+    {
+      id: 'glass-loss',
+      label: '10. ガラス由来損失',
+      value: formatOptionalDb(measuredGlassOnlyLossDb),
+      status:
+        measuredGlassOnlyLossDb === null
+          ? 'info'
+          : measuredGlassOnlyLossDb >= 0
+            ? 'ok'
+            : 'risk',
+      memo: '実測窓損失から現在モデルの入射角損失を差し引いた概算です。',
+    },
+    {
+      id: 'angle-loss',
+      label: '11. 入射角仮説',
+      value: formatDb(angleLossDb),
+      status: settings.incidentAngleDeg >= 45 ? 'ok' : 'warn',
+      memo: '浅い角度では窓面透過のばらつきが大きくなります。角度別再測の候補です。',
+    },
+    {
+      id: 'namigate-gain',
+      label: '12. ナミゲート実効改善',
+      value: formatOptionalDb(measuredNamigateGainDb),
+      status:
+        measuredNamigateGainDb === null
+          ? 'info'
+          : measuredNamigateGainDb > 0
+            ? 'ok'
+            : 'risk',
+      memo: '閉鎖＋ナミゲートありと閉鎖＋なしの差です。効果の主指標です。',
+    },
+    {
+      id: 'namigate-model-gap',
+      label: '13. ナミゲート推定差',
+      value: formatOptionalDb(measuredNamigateGapDb),
+      status:
+        measuredNamigateGapDb === null
+          ? 'info'
+          : Math.abs(measuredNamigateGapDb) <= 3
+            ? 'ok'
+            : Math.abs(measuredNamigateGapDb) <= 8
+              ? 'warn'
+              : 'risk',
+      memo: '実測改善量とアプリ推定改善量の差です。面積補正や設置効率の校正に使います。',
+    },
+    {
+      id: 'recovery-rate',
+      label: '14. 実測回復率',
+      value: formatOptionalPercent(measuredRecoveryRate),
+      status:
+        measuredRecoveryRate === null
+          ? 'info'
+          : measuredRecoveryRate >= 70
+            ? 'ok'
+            : measuredRecoveryRate >= 30
+              ? 'warn'
+              : 'risk',
+      memo: '窓で落ちた分のうち、ナミゲートで何%戻せたかです。',
+    },
+    {
+      id: 'model-bias',
+      label: '15. 実測-推定 平均',
+      value: formatOptionalDb(measuredAverageResidualDb),
+      status: residualStatus,
+      memo: '3状態に共通するオフセットならEIRP、アンテナ利得、追加損失を見直します。',
+    },
+    {
+      id: 'csv-rmse',
+      label: '16. CSV RMSE',
+      value: formatOptionalDb(pointErrorStats.rmseDb),
+      status: rmseStatus,
+      memo: 'CSV点別のモデル誤差です。地点差が大きい場合は室内伝搬指数や遮蔽を見ます。',
+    },
+    {
+      id: 'max-outlier',
+      label: '17. 最大外れ値',
+      value: formatOptionalDb(maxAbsResidualDb),
+      status:
+        maxAbsResidualDb === null
+          ? 'info'
+          : maxAbsResidualDb <= 6
+            ? 'ok'
+            : maxAbsResidualDb <= 12
+              ? 'warn'
+              : 'risk',
+      memo: '大きな外れ値は人体遮蔽、端末向き、マルチパス、測定点記録ミスの候補です。',
+    },
+    {
+      id: 'theory-bias',
+      label: '18. 実測-理論 平均',
+      value: formatOptionalDb(measuredVsTheoryAverageGapDb),
+      status:
+        measuredVsTheoryAverageGapDb === null
+          ? 'info'
+          : Math.abs(measuredVsTheoryAverageGapDb) <= 3
+            ? 'ok'
+            : Math.abs(measuredVsTheoryAverageGapDb) <= 8
+              ? 'warn'
+              : 'risk',
+      memo: '外部理論値との差です。全状態同方向なら共通条件、特定状態だけなら窓/NG条件を疑います。',
+    },
+    {
+      id: 'quality-records',
+      label: '19. 品質指標記録',
+      value: `SINR ${formatRecordRatio(sinrRecordedCount, pointComparisons.length)} / DLUL ${formatRecordRatio(throughputRecordedCount, pointComparisons.length)}`,
+      status:
+        pointComparisons.length === 0
+          ? 'info'
+          : sinrRecordedCount === pointComparisons.length &&
+              throughputRecordedCount === pointComparisons.length
+            ? 'ok'
+            : sinrRecordedCount > 0 || throughputRecordedCount > 0
+              ? 'warn'
+              : 'risk',
+      memo: 'RSRPが改善してもSINRやスループットが伸びない場合があります。',
+    },
+    {
+      id: 'depth-coverage',
+      label: '20. 室内奥行カバー',
+      value: depthCoveragePercent === null ? '未入力' : `${numberFormatter.format(depthCoveragePercent)}%`,
+      status:
+        depthCoveragePercent === null
+          ? 'info'
+          : depthCoveragePercent >= 80
+            ? 'ok'
+            : depthCoveragePercent >= 45
+              ? 'warn'
+              : 'risk',
+      memo: '奥側まで測れているかの目安です。到達距離評価には窓際、中央、奥側の点が必要です。',
+    },
+  ] satisfies FieldAidItem[]
 }
 
 function getHeatColor(rsrpDbm: number, thresholdDbm: number) {
@@ -2015,6 +2317,32 @@ function ResearchColumns() {
   )
 }
 
+function FieldAidPanel({ items }: { items: FieldAidItem[] }) {
+  const okCount = items.filter((item) => item.status === 'ok').length
+  const riskCount = items.filter((item) => item.status === 'risk').length
+
+  return (
+    <section className="field-aid-panel" aria-label="実地測定レビュー20項目">
+      <div className="subsection-heading">
+        <h3>実地測定レビュー20項目</h3>
+        <span>
+          良好 {numberFormatter.format(okCount)} / 要確認{' '}
+          {numberFormatter.format(riskCount)}
+        </span>
+      </div>
+      <div className="field-aid-grid">
+        {items.map((item) => (
+          <article className={`field-aid-card is-${item.status}`} key={item.id}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.memo}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function buildMeasurementCsv(points: MeasurementPoint[]) {
   const escape = (value: string | number | null) => {
     if (value === null) {
@@ -2081,6 +2409,7 @@ function buildExperimentReport({
   scenarioResults,
   theoryComparisons,
   fieldEffectRows,
+  fieldAidItems,
   pointComparisons,
   errorStats,
   qualityStats,
@@ -2093,6 +2422,7 @@ function buildExperimentReport({
   scenarioResults: ScenarioResult[]
   theoryComparisons: TheoryComparison[]
   fieldEffectRows: EffectSummaryRow[]
+  fieldAidItems: FieldAidItem[]
   pointComparisons: PointComparison[]
   errorStats: ErrorStats
   qualityStats: QualityStats
@@ -2157,6 +2487,12 @@ function buildExperimentReport({
         `| ${row.label} | ${row.model} | ${row.measured} | ${row.theory} | ${row.delta} | ${row.memo} |`,
     )
     .join('\n')
+  const fieldAidRowsText = fieldAidItems
+    .map(
+      (item) =>
+        `| ${item.label} | ${item.value} | ${item.status} | ${item.memo} |`,
+    )
+    .join('\n')
 
   return [
     '# ローカル5G 窓面電波改善 実証試験レポート',
@@ -2214,6 +2550,11 @@ function buildExperimentReport({
     '| --- | ---: | ---: | ---: | ---: | --- |',
     effectRowsText,
     '',
+    '## 実地測定レビュー20項目',
+    '| 項目 | 値 | 状態 | 確認ポイント |',
+    '| --- | ---: | --- | --- |',
+    fieldAidRowsText,
+    '',
     '## 実測点誤差',
     `- 実測点数: ${numberFormatter.format(errorStats.count)}`,
     `- 平均誤差: ${formatOptionalDb(errorStats.meanResidualDb)}`,
@@ -2269,6 +2610,7 @@ function buildAiAnalysisText({
   measuredComparisons,
   theoryComparisons,
   fieldEffectRows,
+  fieldAidItems,
   angleLossDb,
   areaGainDb,
   totalNamigateGainDb,
@@ -2284,6 +2626,7 @@ function buildAiAnalysisText({
   measuredComparisons: MeasuredComparison[]
   theoryComparisons: TheoryComparison[]
   fieldEffectRows: EffectSummaryRow[]
+  fieldAidItems: FieldAidItem[]
   angleLossDb: number
   areaGainDb: number
   totalNamigateGainDb: number
@@ -2331,6 +2674,12 @@ function buildAiAnalysisText({
     .map(
       (row) =>
         `| ${row.label} | ${row.model} | ${row.measured} | ${row.theory} | ${row.delta} | ${row.memo} |`,
+    )
+    .join('\n')
+  const fieldAidRows = fieldAidItems
+    .map(
+      (item) =>
+        `| ${item.label} | ${item.value} | ${item.status} | ${item.memo} |`,
     )
     .join('\n')
 
@@ -2422,6 +2771,11 @@ function buildAiAnalysisText({
     '| 項目 | アプリモデル | 実測 | 外部理論 | 実測-理論 | 読み方 |',
     '| --- | ---: | ---: | ---: | ---: | --- |',
     effectRows,
+    '',
+    '## 現地測定レビュー20項目',
+    '| 項目 | 値 | 状態 | 確認ポイント |',
+    '| --- | ---: | --- | --- |',
+    fieldAidRows,
     '',
     '## 改善効果',
     `- 推定の窓なし-窓あり差: ${formatDb(estimatedWindowLossDb)}`,
@@ -3944,6 +4298,44 @@ function App() {
     ],
   )
 
+  const fieldAidItems = useMemo(
+    () =>
+      buildFieldAidItems({
+        settings,
+        protocol,
+        measuredComparisons,
+        theoryComparisons,
+        pointComparisons,
+        pointErrorStats,
+        qualityStats,
+        measuredAverageResidualDb,
+        measuredVsTheoryAverageGapDb,
+        measuredWindowLossDb,
+        measuredGlassOnlyLossDb,
+        angleLossDb,
+        measuredNamigateGainDb,
+        measuredNamigateGapDb,
+        measuredRecoveryRate,
+      }),
+    [
+      angleLossDb,
+      measuredAverageResidualDb,
+      measuredComparisons,
+      measuredGlassOnlyLossDb,
+      measuredNamigateGainDb,
+      measuredNamigateGapDb,
+      measuredRecoveryRate,
+      measuredVsTheoryAverageGapDb,
+      measuredWindowLossDb,
+      pointComparisons,
+      pointErrorStats,
+      protocol,
+      qualityStats,
+      settings,
+      theoryComparisons,
+    ],
+  )
+
   const aiAnalysisText = useMemo(
     () =>
       buildAiAnalysisText({
@@ -3953,6 +4345,7 @@ function App() {
         measuredComparisons,
         theoryComparisons,
         fieldEffectRows,
+        fieldAidItems,
         angleLossDb,
         areaGainDb,
         totalNamigateGainDb,
@@ -3969,6 +4362,7 @@ function App() {
       measuredComparisons,
       theoryComparisons,
       fieldEffectRows,
+      fieldAidItems,
       angleLossDb,
       areaGainDb,
       totalNamigateGainDb,
@@ -4183,6 +4577,7 @@ function App() {
         scenarioResults,
         theoryComparisons,
         fieldEffectRows,
+        fieldAidItems,
         pointComparisons,
         errorStats: pointErrorStats,
         qualityStats,
@@ -4194,6 +4589,7 @@ function App() {
       calibrationResult,
       confidenceRows,
       fieldEffectRows,
+      fieldAidItems,
       pointComparisons,
       pointErrorStats,
       protocol,
@@ -5441,6 +5837,8 @@ function App() {
                 </div>
               </div>
 
+              <FieldAidPanel items={fieldAidItems} />
+
               <div className="csv-import-panel">
                 <div className="subsection-heading">
                   <h3>CSV実測点取り込み</h3>
@@ -5683,6 +6081,8 @@ function App() {
                 </button>
                 {copyStatus ? <span>{copyStatus}</span> : null}
               </div>
+
+              <FieldAidPanel items={fieldAidItems} />
 
               <div className="analysis-table-grid">
                 <div className="compact-table">

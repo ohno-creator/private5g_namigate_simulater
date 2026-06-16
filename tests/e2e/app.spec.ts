@@ -350,6 +350,10 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   await expect(page.getByRole('table', { name: 'dB寄与分解' })).toContainText(
     'ナミゲート実効改善',
   )
+  await expect(page.getByLabel('実地測定レビュー20項目')).toContainText(
+    '室内奥行カバー',
+  )
+  await expect(page.locator('.field-aid-card')).toHaveCount(20)
 
   await page.getByRole('button', { name: 'AI分析用データをコピー' }).click()
   await expect(resultsPanel).toContainText('AI分析用データをコピーしました')
@@ -361,6 +365,8 @@ test('実測値を比較しAI分析用データをコピーできる', async ({ 
   expect(copiedText).toContain('| 窓あり |')
   expect(copiedText).toContain('-108 dBm')
   expect(copiedText).toContain('## dB寄与分解')
+  expect(copiedText).toContain('## 現地測定レビュー20項目')
+  expect(copiedText).toContain('20. 室内奥行カバー')
   expect(copiedText).toContain('| 窓あり＋ナミゲート |')
   expect(copiedText).toContain('-79.5 dBm')
   expect(copiedText).toContain('## 改善効果')

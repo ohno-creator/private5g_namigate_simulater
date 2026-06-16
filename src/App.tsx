@@ -33,7 +33,14 @@ type OutdoorModelId =
   | 'hataSuburban'
   | 'hataOpen'
 type ScenarioKey = 'noWindow' | 'withWindow' | 'withNamigate'
-type ActiveView = 'overview' | 'measurement' | 'analysis' | 'visualization' | 'charts'
+type ActiveView =
+  | 'overview'
+  | 'visualization'
+  | 'charts'
+  | 'measurement'
+  | 'analysis'
+  | 'evidence'
+type InputStepId = 'radio' | 'windowRoom' | 'namigate' | 'measurement' | 'review'
 type ModulePresetId =
   | 'custom'
   | 'sub6IndoorSmallCell'
@@ -457,6 +464,117 @@ const HEATMAP_COLUMNS = 18
 const HEATMAP_ROWS = 12
 const SAVED_CASES_STORAGE_KEY = 'private5g-namigate-saved-cases'
 
+const INPUT_STEPS: {
+  id: InputStepId
+  label: string
+  description: string
+  objective: string
+}[] = [
+  {
+    id: 'radio',
+    label: '無線・屋外',
+    description: '電波が窓へ届くまで',
+    objective: '周波数、EIRP、アンテナ高、屋外距離を先に固定します。',
+  },
+  {
+    id: 'windowRoom',
+    label: '窓・室内',
+    description: '窓損失と室内の広がり',
+    objective: '窓の材質、寸法、入射角、部屋寸法、受信位置を入れます。',
+  },
+  {
+    id: 'namigate',
+    label: 'ナミゲート',
+    description: '改善仮説を調整',
+    objective: '改善量、サイズ、設置効率を変えて、窓なしとの差をどこまで埋めるか見ます。',
+  },
+  {
+    id: 'measurement',
+    label: '実測・保存',
+    description: '現場データと条件記録',
+    objective: '実測RSRP、CSV、測定プロトコル、試験ケースを記録します。',
+  },
+  {
+    id: 'review',
+    label: '確認',
+    description: '結果の読み方を選ぶ',
+    objective: 'サマリー、3D、グラフ、校正、根拠へ迷わず移動します。',
+  },
+]
+
+const STEP_INSIGHTS: Record<InputStepId, string[]> = {
+  radio: [
+    '5Gの屋外区間は、見通し、アンテナ高、周波数、建物侵入損失の扱いで結果が大きく変わります。まず送信側条件を固定すると、後続の窓損失やナミゲート効果を分離して見られます。',
+    '奥村-秦モデルは古典的なマクロセル経験式で、ローカル5Gの4.7GHzや28GHzでは適用範囲外になりやすいため、比較用のプリセットとして扱います。',
+  ],
+  windowRoom: [
+    '建物侵入損失の標準モデルでは、従来型建物と熱効率の高い建物を分けて扱います。Low-Eや金属膜入りガラスは、窓損失の主因になりやすい入力です。',
+    '入射角、偏波、室内奥行、受信高さは実測ばらつきに効くため、図と同じ座標感で入力すると現場で説明しやすくなります。',
+  ],
+  namigate: [
+    '窓面の透過改善は、周波数、偏波、入射角、開口・面積、設置ずれに強く依存します。このMVPでは改善量を仮説値として置き、実測で校正する設計です。',
+    '判断軸は「窓ありから何dB上がったか」だけでなく、「窓なしとの差を何%埋めたか」です。',
+  ],
+  measurement: [
+    '実測比較では、同じ測定点、同じ高さ、同じ端末向き、十分な平均化時間を揃えるほど、窓損失と改善量を切り分けやすくなります。',
+    'RSRPだけでなくSINR、RSRQ、DL/ULを残すと、強度改善と通信品質改善が一致しているか確認できます。',
+  ],
+  review: [
+    '商用ダッシュボードでは、入力を小さなステップに分け、結果サマリーを常時見せる構成が迷いを減らします。',
+    'まず3状態カードで差を掴み、次に3D/ヒートマップ、最後にグラフと校正を見る順番にすると、非専門家にも説明しやすくなります。',
+  ],
+}
+
+const EVIDENCE_ITEMS: {
+  category: string
+  title: string
+  summary: string
+  url: string
+}[] = [
+  {
+    category: '電波標準',
+    title: '5Gチャネルモデル標準資料',
+    summary:
+      '0.5-100GHz帯の屋外、屋内、屋外-屋内モデルを扱い、建物侵入損失や室内距離損失を分けて考える根拠にしています。',
+    url: 'https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3173',
+  },
+  {
+    category: '建物侵入損失',
+    title: '建物侵入損失の国際推奨モデル',
+    summary:
+      '80MHz-100GHzの建物侵入損失を、従来型建物と熱効率の高い建物で分けて扱う考え方を参照しています。',
+    url: 'https://www.itu.int/rec/R-REC-P.2109',
+  },
+  {
+    category: '窓・外皮測定',
+    title: '屋外から屋内への侵入損失測定',
+    summary:
+      '3.5GHzから24GHzの実測で、建物外皮と窓仕様によるばらつきが大きいことを示す資料です。',
+    url: 'https://www.nist.gov/publications/propagation-measurements-and-modeling-building-entry-loss-35-245-ghz',
+  },
+  {
+    category: '測定計画',
+    title: '建物侵入損失モデルの実測検証',
+    summary:
+      '標準モデルと現場測定の差を評価する資料で、測定高さ、位置、環境条件を残す設計の根拠にしています。',
+    url: 'https://its.ntia.gov/publications/details?pub=3262',
+  },
+  {
+    category: 'UI設計',
+    title: '段階的開示とフォーム設計',
+    summary:
+      '複雑な入力を一度に見せず、必要な順番で出すことで認知負荷を下げる設計原則を参照しています。',
+    url: 'https://www.nngroup.com/articles/progressive-disclosure/',
+  },
+  {
+    category: 'UI設計',
+    title: '入力フォームの補足説明とエラー予防',
+    summary:
+      '商用フォームで、説明文、近接した補足、入力のまとまりを使って迷いを減らす設計原則を参照しています。',
+    url: 'https://baymard.com/blog/form-field-descriptions',
+  },
+]
+
 const VIEW_TABS: {
   id: ActiveView
   label: string
@@ -465,12 +583,22 @@ const VIEW_TABS: {
   {
     id: 'overview',
     label: '概要',
-    description: '3状態の差と到達性を最初に確認',
+    description: '3状態の差と到達性',
+  },
+  {
+    id: 'visualization',
+    label: '位置・分布',
+    description: '3Dとヒートマップ',
+  },
+  {
+    id: 'charts',
+    label: 'グラフ',
+    description: '距離、角度、面積',
   },
   {
     id: 'measurement',
     label: '実測データ',
-    description: '手入力やCSVから現場データを比較',
+    description: '現場値とCSV比較',
   },
   {
     id: 'analysis',
@@ -478,14 +606,9 @@ const VIEW_TABS: {
     description: '誤差、校正候補、レポートを作成',
   },
   {
-    id: 'visualization',
-    label: '可視化',
-    description: '位置関係と室内分布を確認',
-  },
-  {
-    id: 'charts',
-    label: 'グラフ',
-    description: '距離、角度、面積の傾向を確認',
+    id: 'evidence',
+    label: '根拠',
+    description: 'モデルとUIの考え方',
   },
 ]
 
@@ -499,47 +622,47 @@ const HELP_TEXT: Record<string, string> = {
   RMSE:
     '推定と実測のズレを二乗平均平方根で表した値です。小さいほどモデルが現場に合っています。',
   '無線機プリセット': '汎用的な基地局・通信モジュール構成の初期値です。メーカー仕様や免許条件を保証するものではありません。',
-  '周波数': '電波の周波数です。FSPLや奥村-秦モデルの屋外損失計算に使い、高い周波数ほど損失が大きくなります。',
+  '周波数': '電波の周波数です。標準的な5Gチャネルモデルでは周波数が建物侵入損失、回折、反射、窓透過に強く効きます。高い周波数ほど窓や遮蔽物の影響が目立ちやすくなります。',
   'EIRP計算方式': 'EIRPを直接入れるか、送信出力やアンテナ利得から計算するかを選びます。',
   'EIRP直接入力': '送信出力、アンテナ利得、給電損失をまとめた実効的な送信電力です。免許条件上のEIRP制限とは別に、正式判断は最新の総務省資料で確認してください。',
   '送信出力': '無線機から出る空中線電力相当の入力値です。詳細EIRP計算方式のときに使い、法規制上は無線局免許・技術基準の確認対象になります。',
   '送信アンテナ利得': '送信アンテナが特定方向へ電波を集中させる効果です。EIRPは概ね送信出力＋アンテナ利得−給電損失で大きくなります。',
-  '送信アンテナ高': '屋外側の送信アンテナ中心の地上高です。窓中心高との差から屋外の3D斜距離を計算します。',
+  '送信アンテナ高': '屋外側の送信アンテナ中心の地上高です。屋外-屋内リンクでは高さ差が見通し、入射角、屋外3D距離に効くため、仮値ではなく現地の設置高を入れると比較が安定します。',
   '送信給電損失': '無線機からアンテナまでのケーブルなどで失われる量です。',
   'その他送信損失': 'コネクタ、分配器、設置条件など送信側の追加損失です。',
   '受信アンテナ利得': '受信側アンテナの利得です。端末内蔵アンテナなら0dBi付近から始めると扱いやすいです。',
-  '受信アンテナ高': '屋内側の代表受信点の高さです。窓中心高との差から室内の3D斜距離を計算します。',
+  '受信アンテナ高': '屋内側の代表受信点の高さです。端末高さやアンテナ向きは実測ばらつきの大きな要因なので、机上、手持ち、三脚などの測定条件に合わせて固定します。',
   '受信給電損失': '受信側のケーブルや接続部で失われる量です。',
   '受信機内部損失': '端末筐体や人体保持など、受信系で見込む追加損失です。',
   'アンテナ指向ずれ損失': '送受信アンテナの方位・チルト・ビーム方向が理想から外れる分を追加損失として見込みます。',
   '偏波不整合損失': '送受信アンテナの偏波向きがずれることで発生する損失です。',
   'フェージングマージン': '反射や人体遮蔽などのばらつきを保守的に見込む余裕です。',
-  '屋外伝搬モデル': '送信機から窓までの屋外区間をどう見積もるかを選びます。FSPLは見通し基準、奥村-秦は市街地/郊外/開放地の経験式です。',
+  '屋外伝搬モデル': '送信機から窓までの屋外区間をどう見積もるかを選びます。FSPLは見通し基準、奥村-秦は市街地/郊外/開放地の経験式です。ローカル5Gでは適用範囲外表示を必ず確認してください。',
   '屋外距離': '送信機から窓面までの水平距離です。送信アンテナ高と窓中心高を加味して屋外3D斜距離へ変換します。',
   '屋外遮蔽損失': '屋外側の樹木、車両、仮設物、見通し悪化などを追加損失として見込む値です。',
   '地面反射補正': '地面反射などで強め/弱めに見込む補正値です。まず0dBから始めます。',
-  '窓種別': '代表的な窓損失をプリセットから選べます。実測に合わせる場合は窓損失を直接変更します。',
-  '窓損失': '窓ガラスを通過するときに失われる量です。Low-Eや金属膜入りでは大きくなりやすいです。',
+  '窓種別': '代表的な窓損失をプリセットから選べます。建物侵入損失の標準モデルでは、従来型建物と熱効率の高い建物を分けて扱うため、Low-Eや金属膜入りは別カテゴリとして見ます。',
+  '窓損失': '窓ガラスを通過するときに失われる量です。Low-Eや金属膜入りでは、熱制御膜が電波透過を大きく下げる場合があるため、実測で校正する優先度が高い項目です。',
   '窓幅': '窓の横幅です。図示とヒートマップの窓表示に使います。',
   '窓高さ': '窓の高さです。3D図の窓サイズに使います。',
-  '窓中心高': '窓またはナミゲート中心の地上高です。送信・受信アンテナ高との差から3D距離を計算します。',
-  '入射角': '電波が窓へ入る角度です。90度が正面入射で、浅い角度ほど損失を大きく見込みます。',
+  '窓中心高': '窓またはナミゲート中心の地上高です。送信・受信アンテナ高との差から3D距離と入射の説明を合わせます。',
+  '入射角': '電波が窓へ入る角度です。90度が正面入射で、浅い角度ほど損失を大きく見込みます。実測研究では角度と偏波の違いが窓透過に効くため、現地の方位を確認します。',
   '部屋幅': '窓に沿った横方向の部屋寸法です。接続可能面積の計算に使います。',
   '部屋奥行': '窓から室内奥方向の部屋寸法です。ヒートマップ範囲と到達距離評価に使います。',
   '室内距離': '窓から受信点までの水平距離です。受信アンテナ高と窓中心高を加味して室内3D距離へ変換します。',
-  '屋内伝搬指数': '室内で距離が伸びたときの減衰の強さです。大きいほど奥まで届きにくくなります。',
+  '屋内伝搬指数': '室内で距離が伸びたときの減衰の強さです。屋外-屋内モデルでは、窓通過後の室内奥行損失を別に見ます。什器や間仕切りが多いほど大きめに置きます。',
   '屋内遮蔽損失': '什器、壁、人体、パーティションなど室内側で一律に見込む追加損失です。',
   '改善量プリセット': 'ナミゲート改善量の仮定値を選びます。実測に合わせる場合は改善量を直接変更します。',
-  'ナミゲート改善量': 'ナミゲートで窓あり状態から上積みする改善量の仮定値です。',
+  'ナミゲート改善量': 'ナミゲートで窓あり状態から上積みする改善量の仮定値です。周波数、偏波、入射角、設置位置に依存するため、まず仮説値として入れ、実測比較で校正します。',
   'サイズ幅': 'ナミゲートの幅です。面積補正と図示に使います。',
   'サイズ高さ': 'ナミゲートの高さです。面積補正と図示に使います。',
-  '面積補正係数': 'ナミゲート面積による改善量の効き具合を調整します。',
+  '面積補正係数': 'ナミゲート面積による改善量の効き具合を調整します。開口・周期構造・有効面積の影響を簡易的に表す係数です。',
   '面積補正上限': '面積補正が大きくなりすぎないようにする上限です。',
   '入射角回復率': '入射角損失のうち、ナミゲートがどれだけ回復できると仮定するかです。',
   '設置効率': '理想的な改善量に対して、実際の設置で得られる割合です。',
   '追加損失': '取り付け状態や位置ずれなどで差し引く損失です。',
   '最大総改善量': 'ナミゲートによる総改善量の上限です。',
-  '接続しきい値': 'このRSRP以上なら接続可能とみなす判定基準です。',
+  '接続しきい値': 'このRSRP以上なら接続可能とみなす判定基準です。実運用ではRSRPだけでなくSINR、RSRQ、スループットも合わせて確認します。',
   '測定高さ': '実測時の端末またはアンテナ高さです。比較時は高さを固定すると誤差を読みやすくなります。',
   '平均化時間': '1点あたり何秒測って平均するかです。短すぎると瞬間的なフェージングの影響が残ります。',
   'サンプル数/点': '1つの測定点で記録するサンプル数です。ばらつき確認に使います。',
@@ -2943,6 +3066,7 @@ function App() {
   const [savedCases, setSavedCases] = useState<SavedTestCase[]>(loadSavedTestCases)
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const [caseName, setCaseName] = useState('')
+  const [activeInputStep, setActiveInputStep] = useState<InputStepId>('radio')
   const [activeView, setActiveView] = useState<ActiveView>('overview')
   const [copyStatus, setCopyStatus] = useState('')
 
@@ -2997,6 +3121,21 @@ function App() {
         [key]: value,
       },
     }))
+  }
+
+  const activeInputStepIndex = INPUT_STEPS.findIndex(
+    (step) => step.id === activeInputStep,
+  )
+  const activeInputStepMeta =
+    INPUT_STEPS[activeInputStepIndex] ?? INPUT_STEPS[0]
+
+  const moveInputStep = (direction: -1 | 1) => {
+    const nextIndex = clamp(
+      activeInputStepIndex + direction,
+      0,
+      INPUT_STEPS.length - 1,
+    )
+    setActiveInputStep(INPUT_STEPS[nextIndex].id)
   }
 
   const currentOutdoorLinkDistanceM = useMemo(
@@ -3542,17 +3681,56 @@ function App() {
       <section className="layout-grid">
         <aside className="control-panel">
           <div className="panel-heading">
-            <h2>入力条件</h2>
+            <div>
+              <p className="panel-kicker">迷わない入力順</p>
+              <h2>入力条件</h2>
+            </div>
+            <span className="step-count">
+              {activeInputStepIndex + 1}/{INPUT_STEPS.length}
+            </span>
           </div>
 
-          <details className="control-group" open>
+          <nav className="input-step-tabs" role="tablist" aria-label="入力ステップ">
+            {INPUT_STEPS.map((step, index) => (
+              <button
+                aria-selected={activeInputStep === step.id}
+                className={activeInputStep === step.id ? 'is-active' : ''}
+                key={step.id}
+                role="tab"
+                type="button"
+                onClick={() => setActiveInputStep(step.id)}
+              >
+                <span>{index + 1}</span>
+                <strong>{step.label}</strong>
+                <small>{step.description}</small>
+              </button>
+            ))}
+          </nav>
+
+          <section className="input-step-overview" aria-label="現在の入力ステップ">
+            <span>今やること</span>
+            <strong>{activeInputStepMeta.objective}</strong>
+          </section>
+
+          <details
+            className={`control-group input-step-panel ${
+              activeInputStep === 'radio' ? 'is-active' : 'is-hidden'
+            }`}
+            open
+          >
             <summary>
-              <span>屋外電波</span>
+              <span>1. 無線・屋外</span>
               <HelpTip text="送信機から窓面へ届くまでの条件です。まずは周波数、EIRP、屋外距離を確認します。" />
             </summary>
             <p className="control-group-note">
               送信側の強さ、アンテナ高、屋外距離を決めます。EIRPが分かる場合は直接入力、無線機構成が分かる場合は詳細計算を使います。
             </p>
+            <div className="research-note">
+              <strong>研究・実務メモ</strong>
+              {STEP_INSIGHTS.radio.map((text) => (
+                <span key={text}>{text}</span>
+              ))}
+            </div>
             <label className="control">
               <TermLabel label="無線機プリセット" help={HELP_TEXT['無線機プリセット']} />
               <select
@@ -3746,14 +3924,25 @@ function App() {
             />
           </details>
 
-          <details className="control-group" open>
+          <details
+            className={`control-group input-step-panel ${
+              activeInputStep === 'windowRoom' ? 'is-active' : 'is-hidden'
+            }`}
+            open
+          >
             <summary>
-              <span>窓条件</span>
+              <span>2. 窓・室内</span>
               <HelpTip text="窓ガラスで失われる量と、電波が窓に入る角度を設定します。Low-Eでは損失が大きくなりやすいです。" />
             </summary>
             <p className="control-group-note">
               窓あり状態の悪化量を決める中心条件です。窓中心高は送信/受信アンテナ高との差から3D距離を出すために使います。
             </p>
+            <div className="research-note">
+              <strong>研究・実務メモ</strong>
+              {STEP_INSIGHTS.windowRoom.map((text) => (
+                <span key={text}>{text}</span>
+              ))}
+            </div>
             <label className="control">
               <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
               <select
@@ -3815,9 +4004,14 @@ function App() {
             />
           </details>
 
-          <details className="control-group" open>
+          <details
+            className={`control-group input-step-panel ${
+              activeInputStep === 'windowRoom' ? 'is-active' : 'is-hidden'
+            }`}
+            open
+          >
             <summary>
-              <span>室内条件</span>
+              <span>2-2. 室内条件</span>
               <HelpTip text="窓から屋内へ入った後の距離減衰と、部屋の評価範囲を設定します。" />
             </summary>
             <p className="control-group-note">
@@ -3872,14 +4066,25 @@ function App() {
             />
           </details>
 
-          <details className="control-group" open>
+          <details
+            className={`control-group input-step-panel ${
+              activeInputStep === 'namigate' ? 'is-active' : 'is-hidden'
+            }`}
+            open
+          >
             <summary>
-              <span>ナミゲート</span>
+              <span>3. ナミゲート</span>
               <HelpTip text="窓あり状態からどれだけ回復できるかを仮定します。実測後は校正候補を反映できます。" />
             </summary>
             <p className="control-group-note">
               ナミゲートの効果は「窓なしとの差をどれだけ埋めたか」で見ます。面積、設置効率、追加損失で現場条件を調整します。
             </p>
+            <div className="research-note">
+              <strong>研究・実務メモ</strong>
+              {STEP_INSIGHTS.namigate.map((text) => (
+                <span key={text}>{text}</span>
+              ))}
+            </div>
             <label className="control">
               <TermLabel label="改善量プリセット" help={HELP_TEXT['改善量プリセット']} />
               <select
@@ -3986,6 +4191,151 @@ function App() {
               onChange={(value) => updateSetting('connectionThresholdDbm', value)}
             />
           </details>
+
+          <details
+            className={`control-group input-step-panel ${
+              activeInputStep === 'measurement' ? 'is-active' : 'is-hidden'
+            }`}
+            open
+          >
+            <summary>
+              <span>4. 実測・保存</span>
+              <HelpTip text="実測値と測定条件を同じ場所で記録します。CSVの詳細比較は右側の実測データタブで確認できます。" />
+            </summary>
+            <p className="control-group-note">
+              机上値だけで判断せず、同じ測定点で3状態をそろえて入力します。ケース保存を使うと条件比較がしやすくなります。
+            </p>
+            <div className="research-note">
+              <strong>研究・実務メモ</strong>
+              {STEP_INSIGHTS.measurement.map((text) => (
+                <span key={text}>{text}</span>
+              ))}
+            </div>
+            {SCENARIOS.map((scenario) => (
+              <label className="control measurement-input" key={scenario.key}>
+                <span>実測RSRP（{scenario.label}）</span>
+                <div className="input-row">
+                  <input
+                    type="number"
+                    value={measuredRsrpValues[scenario.key]}
+                    step={0.1}
+                    placeholder="-80"
+                    onChange={(event) =>
+                      updateMeasuredRsrp(scenario.key, event.target.value)
+                    }
+                  />
+                  <small>dBm</small>
+                </div>
+              </label>
+            ))}
+            <div className="protocol-mini-grid">
+              <NumberInput
+                label="測定高さ"
+                value={protocol.measurementHeightM}
+                min={0.2}
+                step={0.1}
+                unit="m"
+                onChange={(value) => updateProtocol('measurementHeightM', value)}
+              />
+              <NumberInput
+                label="平均化時間"
+                value={protocol.averagingSeconds}
+                min={1}
+                step={1}
+                unit="秒"
+                onChange={(value) => updateProtocol('averagingSeconds', value)}
+              />
+              <NumberInput
+                label="サンプル数/点"
+                value={protocol.samplesPerPoint}
+                min={1}
+                step={1}
+                onChange={(value) => updateProtocol('samplesPerPoint', value)}
+              />
+            </div>
+            <label className="control">
+              <span>ケース名</span>
+              <input
+                value={caseName}
+                onChange={(event) => setCaseName(event.target.value)}
+                placeholder="Low-E窓 ナミゲート20cm 室内8m"
+              />
+            </label>
+            <div className="action-row">
+              <button type="button" onClick={handleSaveCase}>
+                保存
+              </button>
+              <button type="button" onClick={() => setActiveView('measurement')}>
+                実測タブを開く
+              </button>
+              <button type="button" onClick={() => setActiveView('analysis')}>
+                校正タブを開く
+              </button>
+              {copyStatus ? <span>{copyStatus}</span> : null}
+            </div>
+          </details>
+
+          <section
+            className={`control-group input-step-panel review-panel ${
+              activeInputStep === 'review' ? 'is-active' : 'is-hidden'
+            }`}
+          >
+            <div className="review-heading">
+              <span>5. 確認</span>
+              <strong>入力後は、この順番で結果を確認します</strong>
+            </div>
+            <div className="research-note">
+              <strong>UI設計メモ</strong>
+              {STEP_INSIGHTS.review.map((text) => (
+                <span key={text}>{text}</span>
+              ))}
+            </div>
+            <div className="review-action-grid">
+              <button type="button" onClick={() => setActiveView('overview')}>
+                概要を見る
+              </button>
+              <button type="button" onClick={() => setActiveView('visualization')}>
+                位置・分布を見る
+              </button>
+              <button type="button" onClick={() => setActiveView('charts')}>
+                グラフを見る
+              </button>
+              <button type="button" onClick={() => setActiveView('evidence')}>
+                根拠を見る
+              </button>
+            </div>
+            <div className="mini-result-grid">
+              <article>
+                <span>回復率</span>
+                <strong>{numberFormatter.format(clamp(recoveryRate, 0, 100))}%</strong>
+              </article>
+              <article>
+                <span>改善量</span>
+                <strong>{formatDb(totalNamigateGainDb)}</strong>
+              </article>
+              <article>
+                <span>到達距離</span>
+                <strong>{formatMeters(scenarioResults[2].maxReachM)}</strong>
+              </article>
+            </div>
+          </section>
+
+          <div className="input-step-footer">
+            <button
+              disabled={activeInputStepIndex === 0}
+              type="button"
+              onClick={() => moveInputStep(-1)}
+            >
+              前へ
+            </button>
+            <button
+              disabled={activeInputStepIndex === INPUT_STEPS.length - 1}
+              type="button"
+              onClick={() => moveInputStep(1)}
+            >
+              次へ
+            </button>
+          </div>
         </aside>
 
         <section className="results-panel">
@@ -4861,6 +5211,62 @@ function App() {
                 </LineChart>
               </ResponsiveContainer>
             </article>
+            </section>
+          ) : null}
+
+          {activeView === 'evidence' ? (
+            <section className="evidence-section">
+              <div className="section-heading">
+                <h2>モデルとUI設計の根拠</h2>
+                <span className="label-with-help">
+                  簡易シミュレータとしての前提
+                  <HelpTip text="この画面で使っている標準モデル、測定上の注意、UI設計原則をまとめています。" />
+                </span>
+              </div>
+              <div className="evidence-body">
+                <section className="model-principle">
+                  <h3>このMVPの考え方</h3>
+                  <p>
+                    厳密な電磁界解析ではなく、屋外リンク、窓損失、室内距離損失、ナミゲート改善仮説を分けて入力し、
+                    実測で校正するための営業・技術検討用モデルです。
+                  </p>
+                  <div className="principle-grid">
+                    <article>
+                      <span>1</span>
+                      <strong>屋外条件を固定</strong>
+                      <small>周波数、EIRP、距離、アンテナ高を先に決める</small>
+                    </article>
+                    <article>
+                      <span>2</span>
+                      <strong>窓と室内を分離</strong>
+                      <small>Low-E、入射角、室内奥行を別々に見る</small>
+                    </article>
+                    <article>
+                      <span>3</span>
+                      <strong>改善は回復率で読む</strong>
+                      <small>窓ありと窓なしの差をどれだけ埋めたか</small>
+                    </article>
+                    <article>
+                      <span>4</span>
+                      <strong>実測で校正</strong>
+                      <small>同一点、同じ高さ、同じ向きで3状態を比較</small>
+                    </article>
+                  </div>
+                </section>
+
+                <section className="evidence-grid" aria-label="参考資料">
+                  {EVIDENCE_ITEMS.map((item) => (
+                    <article className="evidence-card" key={item.url}>
+                      <span>{item.category}</span>
+                      <strong>{item.title}</strong>
+                      <p>{item.summary}</p>
+                      <a href={item.url} rel="noreferrer" target="_blank">
+                        参照資料を開く
+                      </a>
+                    </article>
+                  ))}
+                </section>
+              </div>
             </section>
           ) : null}
         </section>

@@ -245,6 +245,143 @@
   line-height: 1.45;
 }
 
+.autosave-strip {
+  display: grid;
+  gap: 4px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #d5e3ed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.autosave-strip strong {
+  color: #0071bd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.autosave-strip span {
+  color: #637382;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.pattern-switcher {
+  display: grid;
+  gap: 12px;
+  margin: 10px 14px 0;
+  padding: 13px;
+  border: 1px solid #cfe0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pattern-switcher-full {
+  margin: 0;
+}
+
+.pattern-heading {
+  align-items: flex-start;
+}
+
+.pattern-note {
+  margin: 0;
+  color: #526271;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.pattern-controls {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.3fr);
+}
+
+.pattern-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pattern-actions button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #0067ad;
+  border-radius: 6px;
+  background: #0071bd;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.pattern-actions button:hover {
+  background: #005f9f;
+}
+
+.pattern-actions button:disabled,
+.action-row button:disabled {
+  border-color: #c7d4df;
+  background: #eef3f7;
+  color: #7c8a96;
+  cursor: not-allowed;
+}
+
+.pattern-actions .secondary-button {
+  border-color: #c7d4df;
+  background: #ffffff;
+  color: #344655;
+}
+
+.pattern-actions .secondary-button:hover {
+  background: #f3f7fa;
+}
+
+.pattern-status-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.pattern-status-grid span {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: #f4f8fb;
+  color: #4a5c6a;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.pattern-status-grid strong {
+  display: block;
+  overflow: hidden;
+  color: #172330;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-status-grid .is-ok {
+  background: #e8f6ef;
+  color: #0f7f5a;
+}
+
+.pattern-status-grid .is-warn {
+  background: #fff7e6;
+  color: #9b6100;
+}
+
+.pattern-message {
+  color: #0071bd;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .input-step-panel.is-hidden {
   display: none;
 }
@@ -891,6 +1028,54 @@
   background: #ffffff;
 }
 
+.sample-input {
+  display: grid;
+  gap: 9px;
+}
+
+.sample-input-grid {
+  grid-column: 1 / -1;
+}
+
+.sample-stats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sample-stats span {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f4f8fb;
+  color: #3b4d5c;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
+.sample-stats .is-ok {
+  background: #e8f6ef;
+  color: #0f7f5a;
+}
+
+.sample-stats .is-warn {
+  background: #fff7e6;
+  color: #a06400;
+}
+
+.sample-stats .is-empty {
+  background: #eef3f7;
+  color: #667786;
+}
+
+.sample-input > small {
+  color: #667786;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
 .theory-input-panel,
 .field-effect-panel,
 .field-aid-panel {
@@ -943,6 +1128,7 @@
 }
 
 .csv-textarea,
+.sample-textarea,
 .protocol-notes {
   width: 100%;
   min-height: 118px;
@@ -963,7 +1149,15 @@
   min-height: 82px;
 }
 
+.sample-textarea {
+  min-height: 112px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
+}
+
 .csv-textarea:focus,
+.sample-textarea:focus,
 .protocol-notes:focus {
   border-color: #0071bd;
   outline: 3px solid rgba(0, 113, 189, 0.16);
@@ -2137,9 +2331,14 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .pattern-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .analysis-card-grid,
   .protocol-grid,
   .case-controls,
+  .pattern-controls,
   .checklist-grid,
   .field-aid-grid,
   .column-list,
@@ -2186,12 +2385,15 @@
   .protocol-grid,
   .protocol-mini-grid,
   .case-controls,
+  .pattern-controls,
+  .pattern-status-grid,
   .checklist-grid,
   .field-aid-grid,
   .column-list,
   .position-3d-facts,
   .position-facts,
   .coverage-grid,
+  .sample-stats,
   .heatmap-grid,
   .chart-grid,
   .principle-grid,

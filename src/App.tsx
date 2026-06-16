@@ -141,6 +141,16 @@ type HeatmapData = {
 type MeasuredRsrpValues = Record<ScenarioKey, string>
 type TheoryRsrpValues = Record<ScenarioKey, string>
 
+type RsrpSampleStats = {
+  samples: number[]
+  count: number
+  meanDbm: number | null
+  medianDbm: number | null
+  minDbm: number | null
+  maxDbm: number | null
+  stddevDb: number | null
+}
+
 type MeasuredComparison = ScenarioResult & {
   measuredRsrpDbm: number | null
   residualDb: number | null
@@ -260,8 +270,27 @@ type SavedTestCase = {
   settings: Settings
   measuredRsrpValues: MeasuredRsrpValues
   theoryRsrpValues?: TheoryRsrpValues
+  measurementCsvText?: string
   measurementPoints: MeasurementPoint[]
   protocol: TestProtocol
+}
+
+type ProtocolDraft = Partial<Omit<TestProtocol, 'checklist'>> & {
+  checklist?: Partial<Record<ProtocolChecklistKey, boolean>>
+}
+
+type AutoSaveDraft = {
+  version: 1
+  savedAt: string
+  settings: Settings
+  measuredRsrpValues: MeasuredRsrpValues
+  theoryRsrpValues: TheoryRsrpValues
+  measurementCsvText: string
+  measurementPoints: MeasurementPoint[]
+  protocol: TestProtocol
+  caseName: string
+  activeInputStep: InputStepId
+  activeView: ActiveView
 }
 
 const MAIN_COLOR = '#0071BD'
@@ -491,6 +520,7 @@ const AREA_CHART_SIZES_CM = [5, 10, 15, 20, 30, 40, 50, 60]
 const HEATMAP_COLUMNS = 18
 const HEATMAP_ROWS = 12
 const SAVED_CASES_STORAGE_KEY = 'private5g-namigate-saved-cases'
+const AUTOSAVE_STORAGE_KEY = 'private5g-namigate-autosave-draft-v1'
 
 const INPUT_STEPS: {
   id: InputStepId
@@ -520,7 +550,7 @@ const INPUT_STEPS: {
     id: 'measurement',
     label: '実測・保存',
     description: '現場データと条件記録',
-    objective: '実測RSRP、CSV、測定プロトコル、試験ケースを記録します。',
+    objective: '実測RSRP、CSV、測定プロトコル、入力パターンを記録します。',
   },
   {
     id: 'review',
@@ -560,6 +590,13 @@ const EVIDENCE_ITEMS: {
   url: string
 }[] = [
   {
+    category: '自由空間損失',
+    title: 'ITU-R P.525 自由空間減衰',
+    summary:
+      'FSPL式の一次情報です。アプリでは f[MHz] と d[km] の形に換算した 32.44 + 20log10(f) + 20log10(d) を使います。',
+    url: 'https://www.itu.int/rec/R-REC-P.525/en',
+  },
+  {
     category: '電波標準',
     title: '3GPP TR 38.901 チャネルモデル',
     summary:
@@ -571,21 +608,21 @@ const EVIDENCE_ITEMS: {
     title: '3GPP Release 19のチャネルモデル更新',
     summary:
       'Release 19では7-24GHz帯の検討や屋外-屋内モデルの更新議論が進み、4.7GHzと28GHzの間の周波数帯も標準化上の関心領域になっています。',
-    url: 'https://www.etsi.org/deliver/etsi_tr/138900_138999/138901/19.02.00_60/tr_138901v190200p.pdf',
+    url: 'https://www.3gpp.org/ftp/Specs/archive/38_series/38.901/38901-j20.zip',
   },
   {
     category: '建物侵入損失',
     title: '建物侵入損失の国際推奨モデル',
     summary:
       '80MHz-100GHzの建物侵入損失を、従来型建物と熱効率の高い建物で分けて扱う考え方を参照しています。',
-    url: 'https://www.itu.int/rec/R-REC-P.2109',
+    url: 'https://www.itu.int/rec/R-REC-P.2109/en',
   },
   {
-    category: '窓・外皮測定',
-    title: '屋外から屋内への侵入損失測定',
+    category: '建材・窓材',
+    title: 'ITU-R P.2040 建材・構造物の伝搬影響',
     summary:
-      '3.5GHzから24GHzの実測で、建物外皮と窓仕様によるばらつきが大きいことを示す資料です。',
-    url: 'https://www.nist.gov/publications/propagation-measurements-and-modeling-building-entry-loss-35-245-ghz',
+      '100MHz超の建築材料・構造物による伝搬影響を扱う資料です。窓材、金属膜、壁材の違いを実測校正前提で扱う根拠にしています。',
+    url: 'https://www.itu.int/rec/R-REC-P.2040/en',
   },
   {
     category: '測定計画',
@@ -596,10 +633,10 @@ const EVIDENCE_ITEMS: {
   },
   {
     category: '測定計画',
-    title: '建物侵入損失モデルの実測検証',
+    title: 'NTIA-ITS 電波伝搬モデリング',
     summary:
-      '標準モデルと現場測定の差を評価する資料で、測定高さ、位置、環境条件を残す設計の根拠にしています。',
-    url: 'https://its.ntia.gov/publications/details?pub=3262',
+      '標準モデルと現場測定の差を扱う実務的な入口です。測定高さ、位置、環境条件を残す設計の根拠にしています。',
+    url: 'https://its.ntia.gov/research/prop/propagation-modeling/',
   },
   {
     category: 'ローカル5G',
@@ -871,7 +908,7 @@ const VIEW_TABS: {
 
 const HELP_TEXT: Record<string, string> = {
   RSRP:
-    '端末が受け取る5G基準信号の強さです。値が大きいほど受信しやすく、ここではしきい値以上を接続可能とします。',
+    '端末が受け取る5G基準信号の強さです。このアプリでは厳密なNR測定定義ではなく、リンクバジェットから見たRSRP相当の受信電力近似として扱います。',
   SINR:
     '信号と干渉・雑音の比です。RSRPが高くてもSINRが低いとスループットが伸びにくくなります。',
   RSRQ:
@@ -1046,6 +1083,52 @@ function isValidNumberInput(value: string) {
   return value.trim() !== '' && Number.isFinite(Number(value))
 }
 
+function parseRsrpSamples(value: string) {
+  return value
+    .split(/[\s,、，;；]+/)
+    .map((sample) => Number(sample.trim()))
+    .filter((sample) => Number.isFinite(sample))
+}
+
+function calculateRsrpSampleStats(value: string): RsrpSampleStats {
+  const samples = parseRsrpSamples(value)
+
+  if (samples.length === 0) {
+    return {
+      samples,
+      count: 0,
+      meanDbm: null,
+      medianDbm: null,
+      minDbm: null,
+      maxDbm: null,
+      stddevDb: null,
+    }
+  }
+
+  const sortedSamples = [...samples].sort((a, b) => a - b)
+  const meanDbm =
+    samples.reduce((sum, sample) => sum + sample, 0) / samples.length
+  const medianDbm =
+    sortedSamples.length % 2 === 0
+      ? (sortedSamples[sortedSamples.length / 2 - 1] +
+          sortedSamples[sortedSamples.length / 2]) /
+        2
+      : sortedSamples[Math.floor(sortedSamples.length / 2)]
+  const variance =
+    samples.reduce((sum, sample) => sum + (sample - meanDbm) ** 2, 0) /
+    samples.length
+
+  return {
+    samples,
+    count: samples.length,
+    meanDbm,
+    medianDbm,
+    minDbm: sortedSamples[0],
+    maxDbm: sortedSamples[sortedSamples.length - 1],
+    stddevDb: Math.sqrt(variance),
+  }
+}
+
 function getObservationCountGuidance(count: number) {
   if (count <= 1) {
     return 'N=1は瞬間値の確認向けです。比較評価では最低でも複数回測定し、平均または中央値を使うことを推奨します。'
@@ -1144,10 +1227,25 @@ function normalizeScenario(value: string): ScenarioKey {
   }
 
   if (
+    normalized.includes('nowindow') ||
+    normalized.includes('withoutwindow') ||
+    normalized.includes('openwindow') ||
+    normalized.includes('windowopen') ||
+    normalized.includes('窓なし') ||
+    normalized.includes('窓無し') ||
+    normalized.includes('窓開放')
+  ) {
+    return 'noWindow'
+  }
+
+  if (
     normalized.includes('withwindow') ||
-    normalized.includes('window') ||
+    normalized.includes('closedwindow') ||
+    normalized.includes('windowclosed') ||
+    normalized === 'window' ||
     normalized.includes('窓あり') ||
-    normalized.includes('窓有')
+    normalized.includes('窓有') ||
+    normalized.includes('窓閉鎖')
   ) {
     return 'withWindow'
   }
@@ -1294,7 +1392,7 @@ function calculateHataUrbanLossDb(
 ) {
   const frequencyMHz = Math.max(settings.frequencyMHz, 1)
   const baseHeightM = Math.max(settings.txAntennaHeightM, 0.1)
-  const mobileHeightM = Math.max(settings.rxAntennaHeightM, 0.1)
+  const mobileHeightM = Math.max(settings.windowCenterHeightM, 0.1)
   const distanceKm = Math.max(calculateOutdoorLinkDistanceM(settings) / 1000, 0.001)
   const logFrequency = log10(frequencyMHz)
   const logBaseHeight = log10(baseHeightM)
@@ -1361,8 +1459,8 @@ function getHataValidityMessages(settings: Settings) {
     messages.push('送信アンテナ高30-200m外')
   }
 
-  if (settings.rxAntennaHeightM < 1 || settings.rxAntennaHeightM > 10) {
-    messages.push('受信アンテナ高1-10m外')
+  if (settings.windowCenterHeightM < 1 || settings.windowCenterHeightM > 10) {
+    messages.push('屋外リンク終点高1-10m外')
   }
 
   return messages
@@ -1375,7 +1473,7 @@ function getOutdoorModelNotice(settings: Settings) {
 
   const validityMessages = getHataValidityMessages(settings)
   const baseText =
-    '奥村-秦モデルは、周波数150-1500MHz、距離1-20km、基地局高30-200m、移動局高1-10m程度を前提にした経験式です。'
+    '奥村-秦モデルは、周波数150-1500MHz、距離1-20km、基地局高30-200m、移動局高1-10m程度を前提にした経験式です。このアプリでは屋外区間の終点を窓中心高として扱います。'
 
   if (validityMessages.length === 0) {
     return `${baseText} 現在の入力は代表的な適用範囲内です。`
@@ -1503,13 +1601,34 @@ function getEffectiveAngleLossDb(settings: Settings, angleDeg = settings.inciden
   return settings.windowPresetId === 'none' ? 0 : calculateAngleLossDb(angleDeg)
 }
 
+function getEffectiveWindowLossDb(settings: Settings) {
+  return settings.windowPresetId === 'none'
+    ? 0
+    : Math.max(settings.windowLossDb, 0)
+}
+
+function getRecoverableWindowGapDb(settings: Settings, angleDeg = settings.incidentAngleDeg) {
+  return getEffectiveWindowLossDb(settings) + getEffectiveAngleLossDb(settings, angleDeg)
+}
+
+function calculateAppliedNamigateGainDb(
+  settings: Settings,
+  widthCm = settings.namigateWidthCm,
+  heightCm = settings.namigateHeightCm,
+  angleDeg = settings.incidentAngleDeg,
+) {
+  return Math.min(
+    calculateNamigateTotalGainDb(settings, widthCm, heightCm, angleDeg),
+    getRecoverableWindowGapDb(settings, angleDeg),
+  )
+}
+
 function getScenarioAdjustmentDb(settings: Settings, scenario: ScenarioKey) {
   if (scenario === 'noWindow') {
     return 0
   }
 
-  const windowAndAngleLossDb =
-    settings.windowLossDb + getEffectiveAngleLossDb(settings)
+  const windowAndAngleLossDb = getRecoverableWindowGapDb(settings)
 
   if (scenario === 'withWindow') {
     return -windowAndAngleLossDb
@@ -1517,7 +1636,7 @@ function getScenarioAdjustmentDb(settings: Settings, scenario: ScenarioKey) {
 
   return (
     -windowAndAngleLossDb +
-    calculateNamigateTotalGainDb(settings)
+    calculateAppliedNamigateGainDb(settings)
   )
 }
 
@@ -1801,7 +1920,7 @@ function calculateCalibrationResult(
     averageNullable([
       ...windowLossCandidates,
       manualWindowLossCandidate,
-    ]) ?? settings.windowLossDb,
+    ]) ?? getEffectiveWindowLossDb(settings),
     0,
     80,
   )
@@ -1832,12 +1951,14 @@ function calculateCalibrationResult(
       manualNamigateGainCandidate,
     ]) ?? calculateNamigateTotalGainDb(settings),
     0,
-    Math.max(settings.namigateMaxTotalGainDb, 0),
+    Math.min(
+      Math.max(settings.namigateMaxTotalGainDb, 0),
+      getRecoverableWindowGapDb(windowCalibratedSettings),
+    ),
   )
   const efficiency = Math.max(settings.namigateInstallationEfficiencyPercent, 0.001) / 100
   const recommendedNamigateGainDb = clamp(
-    recommendedTotalNamigateGainDb / efficiency +
-      settings.namigateAdditionalLossDb -
+    (recommendedTotalNamigateGainDb + settings.namigateAdditionalLossDb) / efficiency -
       calculateAreaGainDb(settings) -
       calculateNamigateAngleRecoveryDb(settings),
     0,
@@ -2403,6 +2524,149 @@ function persistSavedTestCases(cases: SavedTestCase[]) {
   localStorage.setItem(SAVED_CASES_STORAGE_KEY, JSON.stringify(cases))
 }
 
+function isInputStepId(value: unknown): value is InputStepId {
+  return (
+    typeof value === 'string' &&
+    INPUT_STEPS.some((step) => step.id === value)
+  )
+}
+
+function isActiveView(value: unknown): value is ActiveView {
+  return (
+    typeof value === 'string' &&
+    VIEW_TABS.some((tab) => tab.id === value)
+  )
+}
+
+function mergeMeasuredRsrpValues(
+  values: Partial<MeasuredRsrpValues> | undefined,
+): MeasuredRsrpValues {
+  return {
+    ...DEFAULT_MEASURED_RSRP,
+    ...(values ?? {}),
+  }
+}
+
+function mergeTheoryRsrpValues(
+  values: Partial<TheoryRsrpValues> | undefined,
+): TheoryRsrpValues {
+  return {
+    ...DEFAULT_THEORY_RSRP,
+    ...(values ?? {}),
+  }
+}
+
+function mergeProtocolDraft(protocol: ProtocolDraft | undefined): TestProtocol {
+  return {
+    ...DEFAULT_PROTOCOL,
+    ...(protocol ?? {}),
+    checklist: {
+      ...DEFAULT_PROTOCOL.checklist,
+      ...(protocol?.checklist ?? {}),
+    },
+  }
+}
+
+function loadAutoSaveDraft(): Partial<AutoSaveDraft> {
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY)
+
+    if (!raw) {
+      return {}
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AutoSaveDraft>
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistAutoSaveDraft(draft: AutoSaveDraft) {
+  try {
+    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(draft))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function savedCasePatternSignature(savedCase: SavedTestCase) {
+  return JSON.stringify({
+    settings: { ...DEFAULT_SETTINGS, ...savedCase.settings },
+    measuredRsrpValues: mergeMeasuredRsrpValues(savedCase.measuredRsrpValues),
+    theoryRsrpValues: mergeTheoryRsrpValues(savedCase.theoryRsrpValues),
+    measurementCsvText:
+      savedCase.measurementCsvText ??
+      (savedCase.measurementPoints?.length
+        ? buildMeasurementCsv(savedCase.measurementPoints)
+        : SAMPLE_MEASUREMENT_CSV),
+    measurementPoints: savedCase.measurementPoints ?? [],
+    protocol: mergeProtocolDraft(savedCase.protocol),
+  })
+}
+
+function currentPatternSignature({
+  settings,
+  measuredRsrpValues,
+  theoryRsrpValues,
+  measurementCsvText,
+  measurementPoints,
+  protocol,
+}: {
+  settings: Settings
+  measuredRsrpValues: MeasuredRsrpValues
+  theoryRsrpValues: TheoryRsrpValues
+  measurementCsvText: string
+  measurementPoints: MeasurementPoint[]
+  protocol: TestProtocol
+}) {
+  return JSON.stringify({
+    settings,
+    measuredRsrpValues,
+    theoryRsrpValues,
+    measurementCsvText,
+    measurementPoints,
+    protocol,
+  })
+}
+
+function createUniquePatternName(
+  baseName: string,
+  cases: SavedTestCase[],
+  ignoredCaseId = '',
+) {
+  let candidate = baseName
+  let index = 2
+
+  while (
+    cases.some(
+      (savedCase) =>
+        savedCase.id !== ignoredCaseId && savedCase.name === candidate,
+    )
+  ) {
+    candidate = `${baseName} (${index})`
+    index += 1
+  }
+
+  return candidate
+}
+
+function formatAutoSaveTime(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '時刻不明'
+  }
+
+  return date.toLocaleString('ja-JP', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function buildExperimentReport({
   settings,
   protocol,
@@ -2524,10 +2788,11 @@ function buildExperimentReport({
 	    `- アンテナ指向ずれ損失: ${formatDb(settings.antennaAlignmentLossDb)}`,
 	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
 	    `- 屋内遮蔽損失: ${formatDb(settings.indoorObstacleLossDb)}`,
-	    `- 窓損失: ${formatDb(settings.windowLossDb)}`,
+	    `- 実効窓損失: ${formatDb(getEffectiveWindowLossDb(settings))}`,
 	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)}°`,
 	    `- 屋内伝搬指数: ${numberFormatter.format(settings.indoorPathLossExponent)}`,
-	    `- ナミゲート総改善量: ${formatDb(calculateNamigateTotalGainDb(settings))}`,
+	    `- ナミゲート改善仮説: ${formatDb(calculateNamigateTotalGainDb(settings))}`,
+	    `- ナミゲート適用改善量: ${formatDb(calculateAppliedNamigateGainDb(settings))}`,
 	    `- 法規制メモ: 本ツールはEIRP等の法令上限適合を判定しません。最新の総務省ガイドライン、免許条件、管轄総合通信局の確認が必要です。`,
     '',
     '## 3状態推定',
@@ -2608,6 +2873,7 @@ function buildAiAnalysisText({
   protocol,
   scenarioResults,
   measuredComparisons,
+  measuredSampleStats,
   theoryComparisons,
   fieldEffectRows,
   fieldAidItems,
@@ -2624,6 +2890,7 @@ function buildAiAnalysisText({
   protocol: TestProtocol
   scenarioResults: ScenarioResult[]
   measuredComparisons: MeasuredComparison[]
+  measuredSampleStats: Record<ScenarioKey, RsrpSampleStats>
   theoryComparisons: TheoryComparison[]
   fieldEffectRows: EffectSummaryRow[]
   fieldAidItems: FieldAidItem[]
@@ -2651,14 +2918,19 @@ function buildAiAnalysisText({
   const estimatedNamigateGainDb =
     scenarioResults[2].rsrpDbm - scenarioResults[1].rsrpDbm
   const rows = measuredComparisons
-    .map(
-      (comparison) =>
+    .map((comparison) => {
+      const stats = measuredSampleStats[comparison.key]
+
+      return (
         `| ${comparison.label} | ${formatDbm(comparison.rsrpDbm)} | ${formatOptionalDbm(
           comparison.measuredRsrpDbm,
-        )} | ${formatOptionalDb(comparison.residualDb)} | ${describeResidual(
+        )} | N=${numberFormatter.format(stats.count)} | ${formatOptionalDb(
           comparison.residualDb,
-        )} |`,
-    )
+        )} | ${describeResidual(
+          comparison.residualDb,
+        )} |`
+      )
+    })
     .join('\n')
   const theoryRows = theoryComparisons
     .map(
@@ -2725,7 +2997,7 @@ function buildAiAnalysisText({
 	    `- 地面反射補正: ${formatDb(settings.groundReflectionDb)}`,
 	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
 	    `- 窓種別: ${windowLabel}`,
-	    `- 窓損失: ${formatDb(settings.windowLossDb)}`,
+	    `- 実効窓損失: ${formatDb(getEffectiveWindowLossDb(settings))}`,
 	    `- 窓サイズ: ${numberFormatter.format(settings.windowWidthM)} x ${numberFormatter.format(
 	      settings.windowHeightM,
 	    )} m`,
@@ -2748,7 +3020,8 @@ function buildAiAnalysisText({
     `- 設置効率: ${numberFormatter.format(settings.namigateInstallationEfficiencyPercent)}%`,
     `- 追加損失: ${formatDb(settings.namigateAdditionalLossDb)}`,
     `- 最大総改善量: ${formatDb(settings.namigateMaxTotalGainDb)}`,
-	    `- ナミゲート総改善量: ${formatDb(totalNamigateGainDb)}`,
+	    `- ナミゲート改善仮説: ${formatDb(totalNamigateGainDb)}`,
+	    `- ナミゲート適用改善量: ${formatDb(calculateAppliedNamigateGainDb(settings))}`,
 	    `- 法規制メモ: このコピー内容は技術検討用であり、EIRP、空中線電力、設置場所、周波数帯の法令適合を判定するものではありません。`,
     '',
     '## ナミゲート効果モデルの根拠',
@@ -2758,8 +3031,8 @@ function buildAiAnalysisText({
     '- ナミゲートの効果は、窓ありと窓なしの差をどれだけ埋めるかという回復量で評価します。',
     '',
     '## 推定値と実測値',
-    '| 状態 | 推定RSRP | 実測RSRP | 差分 実測-推定 | 判定 |',
-    '| --- | ---: | ---: | ---: | --- |',
+    '| 状態 | 推定RSRP | 実測RSRP（平均） | 手入力N | 差分 実測-推定 | 判定 |',
+    '| --- | ---: | ---: | ---: | ---: | --- |',
     rows,
     '',
     '## 外部理論計算値との比較',
@@ -2880,6 +3153,61 @@ function NumberInput({
         />
         {unit ? <small>{unit}</small> : null}
       </div>
+    </label>
+  )
+}
+
+function MeasurementSampleInput({
+  scenario,
+  value,
+  stats,
+  observationCount,
+  onChange,
+}: {
+  scenario: ScenarioDefinition
+  value: string
+  stats: RsrpSampleStats
+  observationCount: number
+  onChange: (value: string) => void
+}) {
+  const countStatus =
+    stats.count === 0
+      ? 'is-empty'
+      : stats.count < observationCount
+        ? 'is-warn'
+        : 'is-ok'
+
+  return (
+    <label className="control measurement-input sample-input">
+      <span className="label-with-help">
+        実測RSRPサンプル（{scenario.label}）
+        <HelpTip text="改行、スペース、カンマ区切りで複数のRSRPを入れられます。比較表では平均値を実測RSRPとして使います。" />
+      </span>
+      <textarea
+        aria-label={`実測RSRPサンプル（${scenario.label}）`}
+        className="sample-textarea"
+        rows={5}
+        value={value}
+        placeholder={'例:\n-64.1\n-63.8\n-64.3'}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck={false}
+      />
+      <div className="sample-stats">
+        <span className={countStatus}>
+          N={numberFormatter.format(stats.count)} / 推奨
+          {numberFormatter.format(observationCount)}
+        </span>
+        <span>平均 {formatOptionalDbm(stats.meanDbm)}</span>
+        <span>中央値 {formatOptionalDbm(stats.medianDbm)}</span>
+        <span>σ {formatOptionalDb(stats.stddevDb)}</span>
+        <span>
+          範囲{' '}
+          {stats.minDbm === null || stats.maxDbm === null
+            ? '未入力'
+            : `${formatDbm(stats.minDbm)} - ${formatDbm(stats.maxDbm)}`}
+        </span>
+      </div>
+      <small>1値だけでも使用できます。N=30評価では30個程度を貼り付けます。</small>
     </label>
   )
 }
@@ -3924,7 +4252,7 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           <small>
             {numberFormatter.format(settings.windowWidthM)}×
             {numberFormatter.format(settings.windowHeightM)}m / 損失{' '}
-            {formatDb(settings.windowLossDb)} / 入射角損失 {formatDb(angleLossDb)}
+            {formatDb(getEffectiveWindowLossDb(settings))} / 入射角損失 {formatDb(angleLossDb)}
           </small>
         </div>
         <div>
@@ -3949,21 +4277,46 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
 }
 
 function App() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const autoSaveDraft = useMemo(() => loadAutoSaveDraft(), [])
+  const [settings, setSettings] = useState<Settings>(() => ({
+    ...DEFAULT_SETTINGS,
+    ...(autoSaveDraft.settings ?? {}),
+  }))
   const [measuredRsrpValues, setMeasuredRsrpValues] =
-    useState<MeasuredRsrpValues>(DEFAULT_MEASURED_RSRP)
+    useState<MeasuredRsrpValues>(() =>
+      mergeMeasuredRsrpValues(autoSaveDraft.measuredRsrpValues),
+    )
   const [theoryRsrpValues, setTheoryRsrpValues] =
-    useState<TheoryRsrpValues>(DEFAULT_THEORY_RSRP)
-  const [measurementCsvText, setMeasurementCsvText] = useState(SAMPLE_MEASUREMENT_CSV)
-  const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([])
+    useState<TheoryRsrpValues>(() =>
+      mergeTheoryRsrpValues(autoSaveDraft.theoryRsrpValues),
+    )
+  const [measurementCsvText, setMeasurementCsvText] = useState(
+    autoSaveDraft.measurementCsvText ?? SAMPLE_MEASUREMENT_CSV,
+  )
+  const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>(
+    () => autoSaveDraft.measurementPoints ?? [],
+  )
   const [importStatus, setImportStatus] = useState('')
-  const [protocol, setProtocol] = useState<TestProtocol>(DEFAULT_PROTOCOL)
+  const [protocol, setProtocol] = useState<TestProtocol>(() =>
+    mergeProtocolDraft(autoSaveDraft.protocol),
+  )
   const [savedCases, setSavedCases] = useState<SavedTestCase[]>(loadSavedTestCases)
   const [selectedCaseId, setSelectedCaseId] = useState('')
-  const [caseName, setCaseName] = useState('')
-  const [activeInputStep, setActiveInputStep] = useState<InputStepId>('radio')
-  const [activeView, setActiveView] = useState<ActiveView>('overview')
+  const [caseName, setCaseName] = useState(autoSaveDraft.caseName ?? '')
+  const [activeInputStep, setActiveInputStep] = useState<InputStepId>(() =>
+    isInputStepId(autoSaveDraft.activeInputStep)
+      ? autoSaveDraft.activeInputStep
+      : 'radio',
+  )
+  const [activeView, setActiveView] = useState<ActiveView>(() =>
+    isActiveView(autoSaveDraft.activeView) ? autoSaveDraft.activeView : 'overview',
+  )
   const [copyStatus, setCopyStatus] = useState('')
+  const [autoSaveStatus, setAutoSaveStatus] = useState(
+    autoSaveDraft.savedAt
+      ? `自動保存から復元 ${formatAutoSaveTime(autoSaveDraft.savedAt)}`
+      : '自動保存は有効です',
+  )
 
   const updateSetting = <K extends keyof Settings>(
     key: K,
@@ -4022,6 +4375,73 @@ function App() {
       },
     }))
   }
+
+  useEffect(() => {
+    const savedAt = new Date().toISOString()
+    const timeoutId = window.setTimeout(() => {
+      const persisted = persistAutoSaveDraft({
+        version: 1,
+        savedAt,
+        settings,
+        measuredRsrpValues,
+        theoryRsrpValues,
+        measurementCsvText,
+        measurementPoints,
+        protocol,
+        caseName,
+        activeInputStep,
+        activeView,
+      })
+
+      setAutoSaveStatus(
+        persisted
+          ? `自動保存済み ${formatAutoSaveTime(savedAt)}`
+          : '自動保存できませんでした',
+      )
+    }, 250)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    activeInputStep,
+    activeView,
+    caseName,
+    measuredRsrpValues,
+    measurementCsvText,
+    measurementPoints,
+    protocol,
+    settings,
+    theoryRsrpValues,
+  ])
+
+  const selectedSavedCase = useMemo(
+    () => savedCases.find((savedCase) => savedCase.id === selectedCaseId) ?? null,
+    [savedCases, selectedCaseId],
+  )
+
+  const currentPatternStateSignature = useMemo(
+    () =>
+      currentPatternSignature({
+        settings,
+        measuredRsrpValues,
+        theoryRsrpValues,
+        measurementCsvText,
+        measurementPoints,
+        protocol,
+      }),
+    [
+      measuredRsrpValues,
+      measurementCsvText,
+      measurementPoints,
+      protocol,
+      settings,
+      theoryRsrpValues,
+    ],
+  )
+
+  const hasUnsavedPatternChanges =
+    selectedSavedCase === null
+      ? false
+      : currentPatternStateSignature !== savedCasePatternSignature(selectedSavedCase)
 
   const activeInputStepIndex = INPUT_STEPS.findIndex(
     (step) => step.id === activeInputStep,
@@ -4084,13 +4504,13 @@ function App() {
     [settings],
   )
 
-  const namigateAngleRecoveryDb = useMemo(
-    () => calculateNamigateAngleRecoveryDb(settings),
+  const angleLossDb = useMemo(
+    () => getEffectiveAngleLossDb(settings),
     [settings],
   )
 
-  const angleLossDb = useMemo(
-    () => getEffectiveAngleLossDb(settings),
+  const effectiveWindowLossDb = useMemo(
+    () => getEffectiveWindowLossDb(settings),
     [settings],
   )
 
@@ -4117,10 +4537,24 @@ function App() {
     [heatmaps, settings],
   )
 
+  const measuredSampleStats = useMemo<Record<ScenarioKey, RsrpSampleStats>>(
+    () =>
+      SCENARIOS.reduce(
+        (accumulator, scenario) => ({
+          ...accumulator,
+          [scenario.key]: calculateRsrpSampleStats(
+            measuredRsrpValues[scenario.key],
+          ),
+        }),
+        {} as Record<ScenarioKey, RsrpSampleStats>,
+      ),
+    [measuredRsrpValues],
+  )
+
   const measuredComparisons = useMemo<MeasuredComparison[]>(
     () =>
       scenarioResults.map((scenario) => {
-        const measuredRsrpDbm = parseOptionalNumber(measuredRsrpValues[scenario.key])
+        const measuredRsrpDbm = measuredSampleStats[scenario.key].meanDbm
 
         return {
           ...scenario,
@@ -4129,7 +4563,7 @@ function App() {
             measuredRsrpDbm === null ? null : measuredRsrpDbm - scenario.rsrpDbm,
         }
       }),
-    [measuredRsrpValues, scenarioResults],
+    [measuredSampleStats, scenarioResults],
   )
 
   const theoryComparisons = useMemo<TheoryComparison[]>(
@@ -4178,8 +4612,9 @@ function App() {
   const withWindowRsrp = scenarioResults[1].rsrpDbm
   const withNamigateRsrp = scenarioResults[2].rsrpDbm
   const totalNamigateGainDb = calculateNamigateTotalGainDb(settings)
-  const powerMultiplier = Math.pow(10, totalNamigateGainDb / 10)
-  const fieldMultiplier = Math.pow(10, totalNamigateGainDb / 20)
+  const appliedNamigateGainDb = calculateAppliedNamigateGainDb(settings)
+  const powerMultiplier = Math.pow(10, appliedNamigateGainDb / 10)
+  const fieldMultiplier = Math.pow(10, appliedNamigateGainDb / 20)
   const windowGapDb = Math.max(noWindowRsrp - withWindowRsrp, 0)
   const recoveredGapDb = Math.max(
     Math.min(withNamigateRsrp - withWindowRsrp, windowGapDb),
@@ -4194,6 +4629,10 @@ function App() {
     measuredResiduals.length === 0
       ? null
       : measuredResiduals.reduce((sum, value) => sum + value, 0) / measuredResiduals.length
+  const manualMeasuredSampleCount = Object.values(measuredSampleStats).reduce(
+    (sum, stats) => sum + stats.count,
+    0,
+  )
   const measuredNoWindowRsrp = measuredComparisons[0].measuredRsrpDbm
   const measuredWithWindowRsrp = measuredComparisons[1].measuredRsrpDbm
   const measuredWithNamigateRsrp = measuredComparisons[2].measuredRsrpDbm
@@ -4237,7 +4676,7 @@ function App() {
     () => [
       {
         label: '窓を閉めた影響',
-        model: formatDb(settings.windowLossDb + angleLossDb),
+        model: formatDb(effectiveWindowLossDb + angleLossDb),
         measured: formatOptionalDb(measuredWindowLossDb),
         theory: formatOptionalDb(theoryWindowLossDb),
         delta: formatOptionalDb(subtractNullable(measuredWindowLossDb, theoryWindowLossDb)),
@@ -4253,7 +4692,7 @@ function App() {
       },
       {
         label: 'ガラス由来の損失推定',
-        model: formatDb(settings.windowLossDb),
+        model: formatDb(effectiveWindowLossDb),
         measured: formatOptionalDb(measuredGlassOnlyLossDb),
         theory: formatOptionalDb(theoryGlassOnlyLossDb),
         delta: formatOptionalDb(
@@ -4290,7 +4729,7 @@ function App() {
       measuredRecoveryRate,
       measuredWindowLossDb,
       recoveryRate,
-      settings.windowLossDb,
+      effectiveWindowLossDb,
       theoryGlassOnlyLossDb,
       theoryNamigateGainDb,
       theoryRecoveryRate,
@@ -4343,6 +4782,7 @@ function App() {
         protocol,
         scenarioResults,
         measuredComparisons,
+        measuredSampleStats,
         theoryComparisons,
         fieldEffectRows,
         fieldAidItems,
@@ -4360,6 +4800,7 @@ function App() {
       protocol,
       scenarioResults,
       measuredComparisons,
+      measuredSampleStats,
       theoryComparisons,
       fieldEffectRows,
       fieldAidItems,
@@ -4404,7 +4845,7 @@ function App() {
       ANGLE_CHART_POINTS.map((angleDeg) => {
         const lossDb =
           settings.windowPresetId === 'none' ? 0 : calculateAngleLossDb(angleDeg)
-        const gapDb = settings.windowLossDb + lossDb
+        const gapDb = effectiveWindowLossDb + lossDb
         const candidateTotalGainDb = calculateNamigateTotalGainDb(
           settings,
           settings.namigateWidthCm,
@@ -4419,7 +4860,7 @@ function App() {
           '窓との差dB': Number(gapDb.toFixed(1)),
         }
       }),
-    [settings],
+    [effectiveWindowLossDb, settings],
   )
 
   const areaData = useMemo(
@@ -4447,13 +4888,18 @@ function App() {
       { label: '標準', settings },
       {
         label: '窓損失 +5dB',
-        settings: { ...settings, windowLossDb: settings.windowLossDb + 5 },
+        settings: {
+          ...settings,
+          windowPresetId: 'custom',
+          windowLossDb: effectiveWindowLossDb + 5,
+        },
       },
       {
         label: '窓損失 -5dB',
         settings: {
           ...settings,
-          windowLossDb: Math.max(settings.windowLossDb - 5, 0),
+          windowPresetId: 'custom',
+          windowLossDb: Math.max(effectiveWindowLossDb - 5, 0),
         },
       },
       {
@@ -4527,7 +4973,7 @@ function App() {
         deltaRsrpDb: rsrpDbm - baseline.rsrpDbm,
       }
     })
-  }, [scenarioResults, settings])
+  }, [effectiveWindowLossDb, scenarioResults, settings])
 
   const confidenceRows = useMemo(() => {
     const cases: Array<{ label: string; settings: Settings }> = [
@@ -4535,7 +4981,8 @@ function App() {
         label: '保守',
         settings: {
           ...settings,
-          windowLossDb: settings.windowLossDb + 5,
+          windowPresetId: 'custom',
+          windowLossDb: effectiveWindowLossDb + 5,
           namigateGainDb: Math.max(settings.namigateGainDb - 5, 0),
           indoorPathLossExponent: settings.indoorPathLossExponent + 0.3,
           fadeMarginDb: settings.fadeMarginDb + 3,
@@ -4548,7 +4995,8 @@ function App() {
         label: '楽観',
         settings: {
           ...settings,
-          windowLossDb: Math.max(settings.windowLossDb - 3, 0),
+          windowPresetId: 'custom',
+          windowLossDb: Math.max(effectiveWindowLossDb - 3, 0),
           namigateGainDb: settings.namigateGainDb + 3,
           indoorPathLossExponent: Math.max(
             settings.indoorPathLossExponent - 0.2,
@@ -4567,7 +5015,7 @@ function App() {
       connectedAreaM2: buildHeatmap(item.settings, 'withNamigate').connectedAreaM2,
       maxReachM: calculateMaxReachM(item.settings, 'withNamigate'),
     }))
-  }, [settings])
+  }, [effectiveWindowLossDb, settings])
 
   const experimentReportText = useMemo(
     () =>
@@ -4676,66 +5124,208 @@ function App() {
     }
   }
 
+  const buildCurrentSavedCase = (id: string, name: string): SavedTestCase => ({
+    id,
+    name,
+    savedAt: new Date().toISOString(),
+    settings,
+    measuredRsrpValues,
+    theoryRsrpValues,
+    measurementCsvText,
+    measurementPoints,
+    protocol,
+  })
+
+  const applySavedCase = (savedCase: SavedTestCase) => {
+    setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
+    setMeasuredRsrpValues(mergeMeasuredRsrpValues(savedCase.measuredRsrpValues))
+    setTheoryRsrpValues(mergeTheoryRsrpValues(savedCase.theoryRsrpValues))
+    setMeasurementCsvText(
+      savedCase.measurementCsvText ??
+        (savedCase.measurementPoints?.length
+          ? buildMeasurementCsv(savedCase.measurementPoints)
+          : SAMPLE_MEASUREMENT_CSV),
+    )
+    setMeasurementPoints(savedCase.measurementPoints ?? [])
+    setProtocol(mergeProtocolDraft(savedCase.protocol))
+    setSelectedCaseId(savedCase.id)
+    setCaseName(savedCase.name)
+  }
+
   const handleSaveCase = () => {
     const name =
       caseName.trim() ||
       protocol.siteName.trim() ||
-      `試験ケース ${new Date().toLocaleString('ja-JP')}`
-    const savedCase: SavedTestCase = {
-      id: `${Date.now()}`,
+      `入力パターン ${new Date().toLocaleString('ja-JP')}`
+    const existingCase =
+      selectedSavedCase ?? savedCases.find((item) => item.name === name) ?? null
+    const uniqueName = createUniquePatternName(
       name,
-      savedAt: new Date().toISOString(),
-      settings,
-      measuredRsrpValues,
-      theoryRsrpValues,
-      measurementPoints,
-      protocol,
-    }
+      savedCases,
+      existingCase?.id,
+    )
+    const savedCase = buildCurrentSavedCase(
+      existingCase?.id ?? `${Date.now()}`,
+      uniqueName,
+    )
     const nextCases = [
       savedCase,
-      ...savedCases.filter((item) => item.name !== name),
+      ...savedCases.filter((item) => item.id !== savedCase.id),
     ].slice(0, 12)
+
     setSavedCases(nextCases)
     persistSavedTestCases(nextCases)
     setSelectedCaseId(savedCase.id)
-    setCaseName(name)
-    setCopyStatus('試験ケースを保存しました')
+    setCaseName(uniqueName)
+    setCopyStatus(
+      existingCase
+        ? '入力パターンを更新しました'
+        : '入力パターンを保存しました',
+    )
+  }
+
+  const handleSaveAsNewCase = () => {
+    const baseName =
+      caseName.trim() ||
+      protocol.siteName.trim() ||
+      `入力パターン ${new Date().toLocaleString('ja-JP')}`
+    const duplicatedName = createUniquePatternName(baseName, savedCases)
+    const savedCase = buildCurrentSavedCase(`${Date.now()}`, duplicatedName)
+    const nextCases = [savedCase, ...savedCases].slice(0, 12)
+
+    setSavedCases(nextCases)
+    persistSavedTestCases(nextCases)
+    setSelectedCaseId(savedCase.id)
+    setCaseName(duplicatedName)
+    setCopyStatus('別パターンとして保存しました')
+  }
+
+  const handleCaseSelectionChange = (caseId: string) => {
+    if (!caseId) {
+      setSelectedCaseId('')
+      setCopyStatus('パターン選択を解除しました')
+      return
+    }
+
+    const savedCase = savedCases.find((item) => item.id === caseId)
+
+    if (!savedCase) {
+      setCopyStatus('読み込む入力パターンが見つかりません')
+      return
+    }
+
+    applySavedCase(savedCase)
+    setCopyStatus('入力パターンを切り替えました')
   }
 
   const handleLoadCase = () => {
     const savedCase = savedCases.find((item) => item.id === selectedCaseId)
 
     if (!savedCase) {
-      setCopyStatus('読み込む試験ケースを選択してください')
+      setCopyStatus('読み込む入力パターンを選択してください')
       return
     }
 
-    setSettings({ ...DEFAULT_SETTINGS, ...savedCase.settings })
-    setMeasuredRsrpValues(savedCase.measuredRsrpValues)
-    setTheoryRsrpValues({
-      ...DEFAULT_THEORY_RSRP,
-      ...(savedCase.theoryRsrpValues ?? {}),
-    })
-    setMeasurementPoints(savedCase.measurementPoints)
-    setProtocol({
-      ...DEFAULT_PROTOCOL,
-      ...savedCase.protocol,
-      checklist: {
-        ...DEFAULT_PROTOCOL.checklist,
-        ...savedCase.protocol.checklist,
-      },
-    })
-    setCaseName(savedCase.name)
-    setCopyStatus('試験ケースを読み込みました')
+    applySavedCase(savedCase)
+    setCopyStatus('入力パターンを再適用しました')
   }
 
   const handleDeleteCase = () => {
+    if (!selectedCaseId) {
+      setCopyStatus('削除する入力パターンを選択してください')
+      return
+    }
+
     const nextCases = savedCases.filter((item) => item.id !== selectedCaseId)
     setSavedCases(nextCases)
     persistSavedTestCases(nextCases)
     setSelectedCaseId('')
-    setCopyStatus('試験ケースを削除しました')
+    setCopyStatus('入力パターンを削除しました')
   }
+
+  const renderPatternManager = (variant: 'compact' | 'full') => (
+    <section
+      aria-label={variant === 'compact' ? '入力パターン管理' : '入力パターン管理 詳細'}
+      className={`pattern-switcher pattern-switcher-${variant}`}
+    >
+      <div className="subsection-heading pattern-heading">
+        <h3>入力パターン管理</h3>
+        <span>入力・実測・CSV・プロトコルを一括切替</span>
+      </div>
+      <p className="pattern-note">
+        保存済みパターンを選ぶと、無線条件、窓/室内条件、ナミゲート条件、手入力実測サンプル、外部理論値、CSV実測点、測定プロトコルをまとめて反映します。
+      </p>
+      <div className="case-controls pattern-controls">
+        <label className="control">
+          <span>パターン名</span>
+          <input
+            value={caseName}
+            onChange={(event) => setCaseName(event.target.value)}
+            placeholder="Low-E窓 ナミゲート20cm 室内8m"
+          />
+        </label>
+        <label className="control">
+          <span>保存済みパターン</span>
+          <select
+            value={selectedCaseId}
+            onChange={(event) => handleCaseSelectionChange(event.target.value)}
+          >
+            <option value="">未選択</option>
+            {savedCases.map((savedCase) => (
+              <option key={savedCase.id} value={savedCase.id}>
+                {savedCase.name} / {formatAutoSaveTime(savedCase.savedAt)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="pattern-actions">
+          <button type="button" onClick={handleSaveCase}>
+            {selectedSavedCase ? '選択中を更新' : '新規保存'}
+          </button>
+          <button type="button" onClick={handleSaveAsNewCase}>
+            別パターンとして保存
+          </button>
+          <button
+            disabled={!selectedCaseId}
+            type="button"
+            onClick={handleLoadCase}
+          >
+            再適用
+          </button>
+          <button
+            className="secondary-button"
+            disabled={!selectedCaseId}
+            type="button"
+            onClick={handleDeleteCase}
+          >
+            削除
+          </button>
+        </div>
+      </div>
+      <div className="pattern-status-grid">
+        <span>
+          保存済み <strong>{numberFormatter.format(savedCases.length)}/12</strong>
+        </span>
+        <span>
+          適用中 <strong>{selectedSavedCase?.name ?? '未選択'}</strong>
+        </span>
+        <span className={hasUnsavedPatternChanges ? 'is-warn' : 'is-ok'}>
+          {selectedSavedCase
+            ? hasUnsavedPatternChanges
+              ? '未保存変更あり'
+              : '保存内容と一致'
+            : '新規入力中'}
+        </span>
+        <span>
+          手入力実測 <strong>N={numberFormatter.format(manualMeasuredSampleCount)}</strong>
+        </span>
+        <span>
+          CSV実測点 <strong>{numberFormatter.format(measurementPoints.length)}点</strong>
+        </span>
+      </div>
+      {copyStatus ? <span className="pattern-message">{copyStatus}</span> : null}
+    </section>
+  )
 
   return (
     <main className="app-shell">
@@ -4783,6 +5373,13 @@ function App() {
             <span>今やること</span>
             <strong>{activeInputStepMeta.objective}</strong>
           </section>
+
+          <section className="autosave-strip" aria-label="入力内容の自動保存">
+            <strong>{autoSaveStatus}</strong>
+            <span>このブラウザに作業中の入力内容を自動保存します</span>
+          </section>
+
+          {renderPatternManager('compact')}
 
           <details
             className={`control-group input-step-panel ${
@@ -5278,7 +5875,7 @@ function App() {
               <HelpTip text="実測値と測定条件を同じ場所で記録します。CSVの詳細比較は右側の実測データタブで確認できます。" />
             </summary>
             <p className="control-group-note">
-              机上値だけで判断せず、同じ測定点で3状態をそろえて入力します。ケース保存を使うと条件比較がしやすくなります。
+              机上値だけで判断せず、同じ測定点で3状態をそろえて入力します。入力パターン保存を使うと条件比較がしやすくなります。
             </p>
             <div className="research-note">
               <strong>研究・実務メモ</strong>
@@ -5287,23 +5884,18 @@ function App() {
               ))}
             </div>
             <ParameterGuidance stepId="measurement" />
-            {SCENARIOS.map((scenario) => (
-              <label className="control measurement-input" key={scenario.key}>
-                <span>実測RSRP（{scenario.label}）</span>
-                <div className="input-row">
-                  <input
-                    type="number"
-                    value={measuredRsrpValues[scenario.key]}
-                    step={0.1}
-                    placeholder="-80"
-                    onChange={(event) =>
-                      updateMeasuredRsrp(scenario.key, event.target.value)
-                    }
-                  />
-                  <small>dBm</small>
-                </div>
-              </label>
-            ))}
+            <div className="measurement-input-grid sample-input-grid">
+              {SCENARIOS.map((scenario) => (
+                <MeasurementSampleInput
+                  key={scenario.key}
+                  scenario={scenario}
+                  value={measuredRsrpValues[scenario.key]}
+                  stats={measuredSampleStats[scenario.key]}
+                  observationCount={protocol.observationCount}
+                  onChange={(value) => updateMeasuredRsrp(scenario.key, value)}
+                />
+              ))}
+            </div>
             <div className="model-note theory-note">
               <strong>外部理論計算値</strong>
               <span>
@@ -5368,7 +5960,7 @@ function App() {
               />
             </div>
             <label className="control">
-              <span>ケース名</span>
+              <span>パターン名</span>
               <input
                 value={caseName}
                 onChange={(event) => setCaseName(event.target.value)}
@@ -5377,7 +5969,7 @@ function App() {
             </label>
             <div className="action-row">
               <button type="button" onClick={handleSaveCase}>
-                保存
+                入力パターンを保存
               </button>
               <button type="button" onClick={() => setActiveView('measurement')}>
                 実測タブを開く
@@ -5524,21 +6116,21 @@ function App() {
               <section className="metric-grid" aria-label="改善効果の要約">
                 <article className="metric-card" data-metric="窓損失">
                   <span className="label-with-help">
-                    窓損失
+                    実効窓損失
                     <HelpTip text={HELP_TEXT['窓損失']} />
                   </span>
-                  <strong>{formatDb(settings.windowLossDb)}</strong>
+                  <strong>{formatDb(effectiveWindowLossDb)}</strong>
                   <small>入射角損失 {formatDb(angleLossDb)}</small>
                 </article>
                 <article className="metric-card" data-metric="ナミゲート総改善量">
                   <span className="label-with-help">
-                    ナミゲート総改善量
-                    <HelpTip text="改善量、面積補正、入射角回復、設置効率、追加損失、上限をまとめた最終的な上積み量です。" />
+                    ナミゲート適用改善量
+                    <HelpTip text="改善仮説を、窓なしとの差を埋める範囲に上限処理した、RSRP計算へ実際に適用する改善量です。" />
                   </span>
-                  <strong>{formatDb(totalNamigateGainDb)}</strong>
+                  <strong>{formatDb(appliedNamigateGainDb)}</strong>
                   <small>
-                    面積 {formatDb(areaGainDb)} / 入射角回復{' '}
-                    {formatDb(namigateAngleRecoveryDb)}
+                    改善仮説 {formatDb(totalNamigateGainDb)} / 面積{' '}
+                    {formatDb(areaGainDb)}
                   </small>
                 </article>
                 <article className="metric-card" data-metric="電力倍率">
@@ -5629,21 +6221,14 @@ function App() {
             <div className="measurement-body">
               <div className="measurement-input-grid">
                 {SCENARIOS.map((scenario) => (
-                  <label className="control measurement-input" key={scenario.key}>
-                    <span>実測RSRP（{scenario.label}）</span>
-                    <div className="input-row">
-                      <input
-                        type="number"
-                        value={measuredRsrpValues[scenario.key]}
-                        step={0.1}
-                        placeholder="-80"
-                        onChange={(event) =>
-                          updateMeasuredRsrp(scenario.key, event.target.value)
-                        }
-                      />
-                      <small>dBm</small>
-                    </div>
-                  </label>
+                  <MeasurementSampleInput
+                    key={scenario.key}
+                    scenario={scenario}
+                    value={measuredRsrpValues[scenario.key]}
+                    stats={measuredSampleStats[scenario.key]}
+                    observationCount={protocol.observationCount}
+                    onChange={(value) => updateMeasuredRsrp(scenario.key, value)}
+                  />
                 ))}
               </div>
 
@@ -5768,6 +6353,11 @@ function App() {
                   <span>観測N数</span>
                   <strong>N={numberFormatter.format(protocol.observationCount)}</strong>
                   <small>{getObservationCountGuidance(protocol.observationCount)}</small>
+                </article>
+                <article>
+                  <span>手入力サンプル</span>
+                  <strong>N={numberFormatter.format(manualMeasuredSampleCount)}</strong>
+                  <small>各状態の平均RSRPを比較に使用</small>
                 </article>
                 <article>
                   <span>平均誤差</span>
@@ -6247,47 +6837,7 @@ function App() {
                 </label>
               </div>
 
-              <div className="case-panel">
-                <div className="subsection-heading">
-                  <h3>試験ケース保存</h3>
-                  <span>ブラウザ内に最大12件保存</span>
-                </div>
-                <div className="case-controls">
-                  <label className="control">
-                    <span>ケース名</span>
-                    <input
-                      value={caseName}
-                      onChange={(event) => setCaseName(event.target.value)}
-                      placeholder="Low-E窓 ナミゲート20cm 室内8m"
-                    />
-                  </label>
-                  <label className="control">
-                    <span>保存済みケース</span>
-                    <select
-                      value={selectedCaseId}
-                      onChange={(event) => setSelectedCaseId(event.target.value)}
-                    >
-                      <option value="">選択してください</option>
-                      {savedCases.map((savedCase) => (
-                        <option key={savedCase.id} value={savedCase.id}>
-                          {savedCase.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="action-row">
-                    <button type="button" onClick={handleSaveCase}>
-                      保存
-                    </button>
-                    <button type="button" onClick={handleLoadCase}>
-                      読み込み
-                    </button>
-                    <button type="button" onClick={handleDeleteCase}>
-                      削除
-                    </button>
-                  </div>
-                </div>
-              </div>
+              {renderPatternManager('full')}
             </div>
             </section>
           ) : null}
@@ -6543,7 +7093,7 @@ function App() {
       </section>
 
       <footer className="app-footer">
-        これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである
+        これは厳密な電磁界解析ではなく、営業・技術検討用の簡易シミュレータである。RSRPはリンクバジェット近似として扱う。
       </footer>
     </main>
   )

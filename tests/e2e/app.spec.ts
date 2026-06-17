@@ -197,6 +197,41 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   await page.goto('/')
 
   const presetSelect = controlSelect(page, '営業用プリセット')
+  await presetSelect.selectOption('fieldTestRu100MhzTdd')
+  await expect(presetSelect).toHaveValue('fieldTestRu100MhzTdd')
+  await expect(controlInput(page, '周波数')).toHaveValue('4700')
+  await expect(page.getByLabel('営業用簡易入力')).toContainText(
+    'DL 4x4MIMO/256QAM',
+  )
+  await expect(controlSelect(page, '間取りプリセット')).toHaveValue('rectangle')
+  await expect(controlSelect(page, '窓サイズプリセット')).toHaveValue('standard')
+  await expect(controlSelect(page, '建物材質')).toHaveValue('reinforcedConcrete')
+
+  await presetSelect.selectOption('notchedCornerRuTest')
+  await expect(presetSelect).toHaveValue('notchedCornerRuTest')
+  await expect(controlSelect(page, '間取りプリセット')).toHaveValue(
+    'notchedCornerWindow',
+  )
+  await expect(controlSelect(page, '窓サイズプリセット')).toHaveValue('standard')
+  await expect(controlSelect(page, '建物材質')).toHaveValue('reinforcedConcrete')
+  await expect(page.getByText('前面左角が欠けた部屋')).toBeVisible()
+
+  await switchToTechnicalMode(page)
+  await expect(controlSelect(page, '無線機プリセット')).toHaveValue(
+    'fieldTestRu100MhzTdd',
+  )
+  await openInputStep(page, '窓・室内')
+  await expect(controlInput(page, '角欠け幅')).toHaveValue('3')
+  await expect(controlInput(page, '角欠け奥行')).toHaveValue('3')
+
+  await openTab(page, '位置・分布')
+  await expect(page.locator('.heat-cell.is-outside').first()).toBeVisible()
+  await expect(page.locator('.heatmap-plan-legend').first()).toContainText(
+    '角欠け',
+  )
+  await expect(page.locator('.position-3d-facts')).toContainText('角欠け')
+
+  await page.getByRole('button', { name: /営業用簡易モード/ }).click()
   await presetSelect.selectOption('singleGlassNear')
   await expect(presetSelect).toHaveValue('singleGlassNear')
   await expect(controlInput(page, '屋外距離')).toHaveValue('50')
@@ -548,8 +583,8 @@ test('モバイル幅でも3Dビューと主要カードが横にはみ出さな
   expect(canvasBox?.width).toBeGreaterThan(280)
   expect(canvasBox?.height).toBeGreaterThan(330)
 
-  await expect(page.locator('.position-3d-facts div')).toHaveCount(4)
-  await expect(page.locator('.position-3d-callout-panel div')).toHaveCount(4)
+  await expect(page.locator('.position-3d-facts div')).toHaveCount(5)
+  await expect(page.locator('.position-3d-callout-panel div')).toHaveCount(5)
   await expect(page.locator('.heatmap-card')).toHaveCount(3)
 
   const hasHorizontalOverflow = await page.evaluate(

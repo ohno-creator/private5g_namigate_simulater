@@ -44,14 +44,25 @@ type InputStepId = 'radio' | 'windowRoom' | 'namigate' | 'measurement' | 'review
 type AppMode = 'sales' | 'technical'
 type SalesPresetId =
   | 'custom'
+  | 'fieldTestRu100MhzTdd'
+  | 'notchedCornerRuTest'
   | 'singleGlassNear'
   | 'doubleGlassOffice'
   | 'lowEStandard'
   | 'lowESevere'
   | 'mmwaveWindow'
   | 'noNamigateCompare'
+type RoomLayoutPresetId = 'rectangle' | 'notchedCornerWindow' | 'custom'
+type WindowSizePresetId = 'standard' | 'wide' | 'small' | 'tall' | 'custom'
+type BuildingMaterialPresetId =
+  | 'reinforcedConcrete'
+  | 'steelFrame'
+  | 'alc'
+  | 'wood'
+  | 'custom'
 type ModulePresetId =
   | 'custom'
+  | 'fieldTestRu100MhzTdd'
   | 'sub6IndoorSmallCell'
   | 'sub6OutdoorMicro'
   | 'sub6CompactCpe'
@@ -83,9 +94,15 @@ type Settings = {
   windowWidthM: number
   windowHeightM: number
   windowCenterHeightM: number
+  windowSizePresetId: WindowSizePresetId
   incidentAngleDeg: number
+  roomLayoutPresetId: RoomLayoutPresetId
   roomWidthM: number
   roomDepthM: number
+  notchWidthM: number
+  notchDepthM: number
+  buildingMaterialPresetId: BuildingMaterialPresetId
+  buildingMaterialLossDb: number
   indoorDistanceM: number
   indoorPathLossExponent: number
   indoorObstacleLossDb: number
@@ -140,6 +157,7 @@ type HeatmapCell = {
   id: string
   rsrpDbm: number
   isConnected: boolean
+  isInRoom: boolean
 }
 
 type HeatmapData = {
@@ -329,6 +347,130 @@ const DISPLAY_MODES: {
   },
 ]
 
+const ROOM_LAYOUT_PRESETS: {
+  id: RoomLayoutPresetId
+  label: string
+  description: string
+  settings: Partial<Settings>
+}[] = [
+  {
+    id: 'rectangle',
+    label: '長方形の部屋',
+    description: '従来どおり、窓が部屋の正面中央にある前提です。',
+    settings: {
+      roomLayoutPresetId: 'rectangle',
+      roomWidthM: 8,
+      roomDepthM: 12,
+      notchWidthM: 0,
+      notchDepthM: 0,
+    },
+  },
+  {
+    id: 'notchedCornerWindow',
+    label: '角欠け・欠け部窓',
+    description:
+      '前面左角が屋外側に欠けたL字間取りです。欠けた部分の奥壁にある窓へ向けて送受信する実地試験パターンです。',
+    settings: {
+      roomLayoutPresetId: 'notchedCornerWindow',
+      roomWidthM: 10,
+      roomDepthM: 12,
+      notchWidthM: 3,
+      notchDepthM: 3,
+    },
+  },
+  {
+    id: 'custom',
+    label: '任意の間取り寸法',
+    description: '部屋寸法や角欠け寸法を手入力した状態です。',
+    settings: {
+      roomLayoutPresetId: 'custom',
+    },
+  },
+]
+
+const WINDOW_SIZE_PRESETS: {
+  id: WindowSizePresetId
+  label: string
+  description: string
+  widthM: number | null
+  heightM: number | null
+}[] = [
+  {
+    id: 'standard',
+    label: '標準窓 2.4×1.8m',
+    description: 'オフィスや工場で説明しやすい標準的な窓サイズです。',
+    widthM: 2.4,
+    heightM: 1.8,
+  },
+  {
+    id: 'wide',
+    label: '横長窓 3.6×1.6m',
+    description: '広い窓面や実証で大きめの窓を使う場合の条件です。',
+    widthM: 3.6,
+    heightM: 1.6,
+  },
+  {
+    id: 'small',
+    label: '小窓 1.2×1.2m',
+    description: '小さい開口部で、窓位置やナミゲート位置の影響を見たい条件です。',
+    widthM: 1.2,
+    heightM: 1.2,
+  },
+  {
+    id: 'tall',
+    label: '縦長窓 1.6×2.2m',
+    description: '縦方向に広い窓や、窓中心高の説明をしたい条件です。',
+    widthM: 1.6,
+    heightM: 2.2,
+  },
+  {
+    id: 'custom',
+    label: '任意サイズ',
+    description: '窓幅・窓高さを手入力した状態です。',
+    widthM: null,
+    heightM: null,
+  },
+]
+
+const BUILDING_MATERIAL_PRESETS: {
+  id: BuildingMaterialPresetId
+  label: string
+  description: string
+  lossDb: number | null
+}[] = [
+  {
+    id: 'reinforcedConcrete',
+    label: '鉄筋コンクリート',
+    description:
+      '初期値です。窓面直達を主経路としつつ、躯体による遮蔽・反射の保守補正を小さく見込みます。',
+    lossDb: 3,
+  },
+  {
+    id: 'steelFrame',
+    label: '鉄骨造',
+    description: '金属部材や外装の影響を軽く見込む条件です。',
+    lossDb: 2,
+  },
+  {
+    id: 'alc',
+    label: 'ALC/軽量外壁',
+    description: '鉄筋コンクリートより軽めの外壁条件として扱います。',
+    lossDb: 1,
+  },
+  {
+    id: 'wood',
+    label: '木造/軽量構造',
+    description: '建物躯体による追加損失を小さめに見る条件です。',
+    lossDb: 0,
+  },
+  {
+    id: 'custom',
+    label: '任意',
+    description: '建物材質補正損失を手入力する条件です。',
+    lossDb: null,
+  },
+]
+
 const SALES_PRESETS: {
   id: SalesPresetId
   label: string
@@ -342,6 +484,74 @@ const SALES_PRESETS: {
     description: '現在の入力値をそのまま使います。個別に数値を調整する場合はこちらになります。',
   },
   {
+    id: 'fieldTestRu100MhzTdd',
+    label: '実地試験RU・100MHz TDD',
+    description:
+      '今回のRU仕様に合わせた条件です。4.6-4.9GHz帯、100MHz幅、TDD、DL 4x4MIMO/256QAM、UL 2x2MIMO/256QAM。スループットはメーカー理論値のため、EIRPや設置条件は現地値で確認します。',
+    measurementHeightM: 1.2,
+    settings: {
+      modulePresetId: 'fieldTestRu100MhzTdd',
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 100,
+      roomLayoutPresetId: 'rectangle',
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 60,
+      roomWidthM: 8,
+      roomDepthM: 12,
+      indoorDistanceM: 8,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'notchedCornerRuTest',
+    label: '角欠け部窓・実地試験RU',
+    description:
+      '今回のRU仕様で、前面左角が欠けた部屋の欠け奥にある窓へ向けて送受信する条件です。初期建材は鉄筋コンクリート、窓は標準窓です。',
+    measurementHeightM: 1.2,
+    settings: {
+      modulePresetId: 'fieldTestRu100MhzTdd',
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 100,
+      roomLayoutPresetId: 'notchedCornerWindow',
+      roomWidthM: 10,
+      roomDepthM: 12,
+      notchWidthM: 3,
+      notchDepthM: 3,
+      windowSizePresetId: 'standard',
+      windowWidthM: 2.4,
+      windowHeightM: 1.8,
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 60,
+      indoorDistanceM: 8,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
     id: 'singleGlassNear',
     label: '通常ガラス・近距離',
     description: '窓損失が小さい条件。効果説明よりも、通常ガラスでは影響が軽いケースを見せる用途です。',
@@ -351,6 +561,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 50,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'single',
       windowLossDb: 3,
       incidentAngleDeg: 90,
@@ -377,6 +593,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 100,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'double',
       windowLossDb: 10,
       incidentAngleDeg: 60,
@@ -403,6 +625,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 100,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'lowE',
       windowLossDb: 40,
       incidentAngleDeg: 60,
@@ -429,6 +657,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 150,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'lowE',
       windowLossDb: 40,
       incidentAngleDeg: 45,
@@ -455,6 +689,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 30,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'lowE',
       windowLossDb: 40,
       incidentAngleDeg: 60,
@@ -481,6 +721,12 @@ const SALES_PRESETS: {
       eirpMode: 'direct',
       eirpDbm: 43,
       outdoorDistanceM: 100,
+      roomLayoutPresetId: 'rectangle',
+      notchWidthM: 0,
+      notchDepthM: 0,
+      windowSizePresetId: 'standard',
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
       windowPresetId: 'lowE',
       windowLossDb: 40,
       incidentAngleDeg: 60,
@@ -573,6 +819,29 @@ const MODULE_PRESETS: {
     label: '任意',
     description: '現在の入力値をそのまま使う',
     settings: {},
+  },
+  {
+    id: 'fieldTestRu100MhzTdd',
+    label: '実地試験RU 4.6-4.9GHz/100MHz TDD',
+    description:
+      '今回の実地試験RU仕様。DL 4x4MIMO/256QAM、UL 2x2MIMO/256QAM、同期DL最大1,488Mbps・UL最大230Mbps、準同期DL最大988Mbps・UL最大466Mbps。EIRPは仮43dBmのため現地設定で上書きしてください',
+    settings: {
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      txPowerDbm: 30,
+      txAntennaGainDbi: 15,
+      txCableLossDb: 1,
+      txOtherLossDb: 1,
+      txAntennaHeightM: 5,
+      rxAntennaGainDbi: 0,
+      rxCableLossDb: 0,
+      rxBodyLossDb: 0,
+      rxAntennaHeightM: 1.2,
+      antennaAlignmentLossDb: 0,
+      fadeMarginDb: 3,
+      outdoorDistanceM: 100,
+    },
   },
   {
     id: 'sub6IndoorSmallCell',
@@ -1229,9 +1498,15 @@ const DEFAULT_SETTINGS: Settings = {
   windowWidthM: 2.4,
   windowHeightM: 1.8,
   windowCenterHeightM: 1.6,
+  windowSizePresetId: 'standard',
   incidentAngleDeg: 60,
+  roomLayoutPresetId: 'rectangle',
   roomWidthM: 8,
   roomDepthM: 12,
+  notchWidthM: 0,
+  notchDepthM: 0,
+  buildingMaterialPresetId: 'reinforcedConcrete',
+  buildingMaterialLossDb: 3,
   indoorDistanceM: 8,
   indoorPathLossExponent: 2.2,
   indoorObstacleLossDb: 0,
@@ -1892,6 +2167,7 @@ function calculateRsrpDbm(
     settings.outdoorObstructionLossDb -
     outdoorPathLossDb -
     indoorLossDb -
+    settings.buildingMaterialLossDb -
     settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
   )
@@ -1905,6 +2181,7 @@ function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
     settings.groundReflectionDb -
     settings.outdoorObstructionLossDb -
     outdoorPathLossDb -
+    settings.buildingMaterialLossDb -
     settings.indoorObstacleLossDb +
     getScenarioAdjustmentDb(settings, scenario)
 
@@ -1926,29 +2203,95 @@ function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
   return Math.sqrt(maxLinkDistanceM * maxLinkDistanceM - heightDeltaM * heightDeltaM)
 }
 
+function getRoomLayoutMetrics(settings: Settings) {
+  const roomWidthM = Math.max(settings.roomWidthM, 1)
+  const roomDepthM = Math.max(settings.roomDepthM, 1)
+  const isNotched =
+    settings.roomLayoutPresetId === 'notchedCornerWindow' ||
+    (settings.roomLayoutPresetId === 'custom' &&
+      settings.notchWidthM > 0 &&
+      settings.notchDepthM > 0)
+  const notchWidthM = isNotched
+    ? clamp(settings.notchWidthM, 0.5, roomWidthM * 0.65)
+    : 0
+  const notchDepthM = isNotched
+    ? clamp(settings.notchDepthM, 0.5, roomDepthM * 0.65)
+    : 0
+
+  return {
+    roomWidthM,
+    roomDepthM,
+    isNotched,
+    notchWidthM,
+    notchDepthM,
+  }
+}
+
+function getWindowPlanPositionM(settings: Settings) {
+  const { roomWidthM, isNotched, notchWidthM, notchDepthM } =
+    getRoomLayoutMetrics(settings)
+
+  if (isNotched) {
+    return {
+      xM: Math.max(notchWidthM / 2, 0.1),
+      yM: notchDepthM,
+    }
+  }
+
+  return {
+    xM: roomWidthM / 2,
+    yM: 0,
+  }
+}
+
+function isPointInsideRoom(settings: Settings, xM: number, yM: number) {
+  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+    getRoomLayoutMetrics(settings)
+
+  if (xM < 0 || xM > roomWidthM || yM < 0 || yM > roomDepthM) {
+    return false
+  }
+
+  if (!isNotched) {
+    return true
+  }
+
+  return !(xM < notchWidthM && yM < notchDepthM)
+}
+
+function calculateEffectiveRoomAreaM2(settings: Settings) {
+  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+    getRoomLayoutMetrics(settings)
+  const notchAreaM2 = isNotched ? notchWidthM * notchDepthM : 0
+
+  return Math.max(roomWidthM * roomDepthM - notchAreaM2, 1)
+}
+
 function getIndoorPointDistanceM(
-  roomWidthM: number,
-  roomDepthM: number,
+  settings: Settings,
   column: number,
   row: number,
 ) {
+  const { roomWidthM, roomDepthM } = getRoomLayoutMetrics(settings)
+  const windowPosition = getWindowPlanPositionM(settings)
   const x = ((column + 0.5) / HEATMAP_COLUMNS) * roomWidthM
   const y = ((row + 0.5) / HEATMAP_ROWS) * roomDepthM
-  const windowCenterX = roomWidthM / 2
-  return Math.max(Math.hypot(x - windowCenterX, y), 1)
+  return Math.max(Math.hypot(x - windowPosition.xM, y - windowPosition.yM), 1)
 }
 
 function buildHeatmap(settings: Settings, scenario: ScenarioKey): HeatmapData {
-  const roomWidthM = Math.max(settings.roomWidthM, 1)
-  const roomDepthM = Math.max(settings.roomDepthM, 1)
+  const { roomWidthM, roomDepthM } = getRoomLayoutMetrics(settings)
   const cellAreaM2 = (roomWidthM * roomDepthM) / (HEATMAP_COLUMNS * HEATMAP_ROWS)
   let connectedCells = 0
 
   const cells = Array.from({ length: HEATMAP_ROWS }, (_, row) =>
     Array.from({ length: HEATMAP_COLUMNS }, (_, column) => {
-      const distanceM = getIndoorPointDistanceM(roomWidthM, roomDepthM, column, row)
+      const xM = ((column + 0.5) / HEATMAP_COLUMNS) * roomWidthM
+      const yM = ((row + 0.5) / HEATMAP_ROWS) * roomDepthM
+      const isInRoom = isPointInsideRoom(settings, xM, yM)
+      const distanceM = getIndoorPointDistanceM(settings, column, row)
       const rsrpDbm = calculateRsrpDbm(settings, scenario, distanceM)
-      const isConnected = rsrpDbm >= settings.connectionThresholdDbm
+      const isConnected = isInRoom && rsrpDbm >= settings.connectionThresholdDbm
 
       if (isConnected) {
         connectedCells += 1
@@ -1958,6 +2301,7 @@ function buildHeatmap(settings: Settings, scenario: ScenarioKey): HeatmapData {
         id: `${scenario}-${row}-${column}`,
         rsrpDbm,
         isConnected,
+        isInRoom,
       }
     }),
   ).flat()
@@ -1969,8 +2313,11 @@ function buildHeatmap(settings: Settings, scenario: ScenarioKey): HeatmapData {
 }
 
 function getMeasurementPointDistanceM(settings: Settings, point: MeasurementPoint) {
-  const windowCenterX = Math.max(settings.roomWidthM, 1) / 2
-  return Math.max(Math.hypot(point.xM - windowCenterX, point.yM), 1)
+  const windowPosition = getWindowPlanPositionM(settings)
+  return Math.max(
+    Math.hypot(point.xM - windowPosition.xM, point.yM - windowPosition.yM),
+    1,
+  )
 }
 
 function buildPointComparisons(
@@ -2759,6 +3106,8 @@ function buildPrintReportHtml({
             <tr><th>周波数</th><td>${escapeHtml(numberFormatter.format(settings.frequencyMHz))} MHz</td><th>屋外距離</th><td>${escapeHtml(formatMeters(settings.outdoorDistanceM))}</td></tr>
             <tr><th>室内距離</th><td>${escapeHtml(formatMeters(settings.indoorDistanceM))}</td><th>屋外伝搬モデル</th><td>${escapeHtml(getOutdoorModelLabel(settings.outdoorModelId))}</td></tr>
             <tr><th>窓種別</th><td>${escapeHtml(windowLabel)}</td><th>実効窓損失</th><td>${escapeHtml(formatDb(effectiveWindowLossDb))}</td></tr>
+            <tr><th>間取り</th><td>${escapeHtml(getRoomLayoutSummary(settings))}</td><th>窓サイズ</th><td>${escapeHtml(getWindowSizeSummary(settings))}</td></tr>
+            <tr><th>建物材質</th><td>${escapeHtml(getBuildingMaterialSummary(settings))}</td><th>建材補正</th><td>${escapeHtml(formatDb(settings.buildingMaterialLossDb))}</td></tr>
             <tr><th>入射角</th><td>${escapeHtml(`${numberFormatter.format(settings.incidentAngleDeg)}° / 損失 ${formatDb(angleLossDb)}`)}</td><th>ナミゲート</th><td>${escapeHtml(`${namigateLabel} / 仮説 ${formatDb(totalNamigateGainDb)} / 適用 ${formatDb(appliedNamigateGainDb)}`)}</td></tr>
             <tr><th>EIRP</th><td>${escapeHtml(formatDbm(effectiveEirpDbm))}</td><th>詳細EIRP</th><td>${escapeHtml(formatDbm(detailedEirpDbm))}</td></tr>
             <tr><th>送信/受信高</th><td>${escapeHtml(`${formatMeters(settings.txAntennaHeightM)} / ${formatMeters(settings.rxAntennaHeightM)}`)}</td><th>窓中心高</th><td>${escapeHtml(formatMeters(settings.windowCenterHeightM))}</td></tr>
@@ -2797,6 +3146,51 @@ function buildPrintReportHtml({
 
 function getModulePresetLabel(id: ModulePresetId) {
   return MODULE_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
+}
+
+function getRoomLayoutPresetLabel(id: RoomLayoutPresetId) {
+  return ROOM_LAYOUT_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
+}
+
+function getWindowSizePresetLabel(id: WindowSizePresetId) {
+  return WINDOW_SIZE_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
+}
+
+function getBuildingMaterialPresetLabel(id: BuildingMaterialPresetId) {
+  return (
+    BUILDING_MATERIAL_PRESETS.find((preset) => preset.id === id)?.label ?? '任意'
+  )
+}
+
+function getRoomLayoutSummary(settings: Settings) {
+  const { isNotched, notchWidthM, notchDepthM } = getRoomLayoutMetrics(settings)
+  const base = `${getRoomLayoutPresetLabel(
+    settings.roomLayoutPresetId,
+  )} / 部屋 ${numberFormatter.format(settings.roomWidthM)}×${numberFormatter.format(
+    settings.roomDepthM,
+  )}m`
+
+  if (!isNotched) {
+    return base
+  }
+
+  return `${base} / 角欠け ${numberFormatter.format(
+    notchWidthM,
+  )}×${numberFormatter.format(notchDepthM)}m`
+}
+
+function getWindowSizeSummary(settings: Settings) {
+  return `${getWindowSizePresetLabel(
+    settings.windowSizePresetId,
+  )} / ${numberFormatter.format(settings.windowWidthM)}×${numberFormatter.format(
+    settings.windowHeightM,
+  )}m / 中心高 ${formatMeters(settings.windowCenterHeightM)}`
+}
+
+function getBuildingMaterialSummary(settings: Settings) {
+  return `${getBuildingMaterialPresetLabel(
+    settings.buildingMaterialPresetId,
+  )} / 補正 ${formatDb(settings.buildingMaterialLossDb)}`
 }
 
 function describeResidual(residualDb: number | null) {
@@ -3245,6 +3639,9 @@ function buildExperimentReport({
 	    `- 屋外水平距離: ${formatMeters(settings.outdoorDistanceM)}`,
 	    `- 屋外3D距離: ${formatMeters(calculateOutdoorLinkDistanceM(settings))}`,
 	    `- 送信アンテナ高: ${formatMeters(settings.txAntennaHeightM)}`,
+	    `- 間取り: ${getRoomLayoutSummary(settings)}`,
+	    `- 窓サイズ: ${getWindowSizeSummary(settings)}`,
+	    `- 建物材質: ${getBuildingMaterialSummary(settings)}`,
 	    `- 窓中心高: ${formatMeters(settings.windowCenterHeightM)}`,
 	    `- 受信アンテナ高: ${formatMeters(settings.rxAntennaHeightM)}`,
 	    `- アンテナ指向ずれ損失: ${formatDb(settings.antennaAlignmentLossDb)}`,
@@ -3460,10 +3857,9 @@ function buildAiAnalysisText({
 	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
 	    `- 窓種別: ${windowLabel}`,
 	    `- 実効窓損失: ${formatDb(getEffectiveWindowLossDb(settings))}`,
-	    `- 窓サイズ: ${numberFormatter.format(settings.windowWidthM)} x ${numberFormatter.format(
-	      settings.windowHeightM,
-	    )} m`,
-	    `- 窓中心高: ${formatMeters(settings.windowCenterHeightM)}`,
+	    `- 窓サイズ: ${getWindowSizeSummary(settings)}`,
+	    `- 間取り: ${getRoomLayoutSummary(settings)}`,
+	    `- 建物材質: ${getBuildingMaterialSummary(settings)}`,
 	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)} deg`,
 	    `- 入射角損失: ${formatDb(angleLossDb)}`,
 	    `- 部屋サイズ: ${numberFormatter.format(settings.roomWidthM)} x ${numberFormatter.format(
@@ -3689,8 +4085,19 @@ function PositionScene3D({
       return undefined
     }
 
-    const roomWidthM = clamp(settings.roomWidthM, 2, 30)
-    const roomDepthM = clamp(settings.roomDepthM, 2, 40)
+    const layoutMetrics = getRoomLayoutMetrics(settings)
+    const roomWidthM = clamp(layoutMetrics.roomWidthM, 2, 30)
+    const roomDepthM = clamp(layoutMetrics.roomDepthM, 2, 40)
+    const notchWidthM = clamp(layoutMetrics.notchWidthM, 0, roomWidthM * 0.65)
+    const notchDepthM = clamp(layoutMetrics.notchDepthM, 0, roomDepthM * 0.65)
+    const isNotched = layoutMetrics.isNotched
+    const windowPlanPosition = getWindowPlanPositionM(settings)
+    const windowPlanX = clamp(
+      windowPlanPosition.xM - roomWidthM / 2,
+      -roomWidthM / 2 + 0.35,
+      roomWidthM / 2 - 0.35,
+    )
+    const windowPlanZ = clamp(windowPlanPosition.yM, 0, roomDepthM - 0.4)
 	    const windowWidthM = clamp(settings.windowWidthM, 0.2, roomWidthM)
 	    const windowHeightM = clamp(settings.windowHeightM, 0.2, 4)
 	    const namigateWidthM = clamp(settings.namigateWidthCm / 100, 0.05, windowWidthM)
@@ -3709,18 +4116,22 @@ function PositionScene3D({
 	      transmitterHeightY + 0.8,
 	      receiverHeightY + 0.8,
 	    )
-	    const receiverZ = clamp(settings.indoorDistanceM, 0.7, roomDepthM - 0.45)
+	    const receiverZ = clamp(
+	      windowPlanZ + settings.indoorDistanceM,
+	      0.7,
+	      roomDepthM - 0.45,
+	    )
 	    const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
 	    const outdoorDisplayM = clamp(Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.6, 3, 9)
     const transmitterX = clamp(
-      -Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM,
+      windowPlanX - Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM,
       -roomWidthM / 2 + 0.6,
       roomWidthM / 2 - 0.6,
 	    )
 	    const transmitterZ = -outdoorDisplayM
 	    const transmitterPoint = new THREE.Vector3(transmitterX, transmitterHeightY, transmitterZ)
-	    const windowPoint = new THREE.Vector3(0, windowCenterY, 0)
-	    const receiverPoint = new THREE.Vector3(0, receiverHeightY, receiverZ)
+	    const windowPoint = new THREE.Vector3(windowPlanX, windowCenterY, windowPlanZ)
+	    const receiverPoint = new THREE.Vector3(windowPlanX, receiverHeightY, receiverZ)
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xf7fafc)
@@ -3756,10 +4167,26 @@ function PositionScene3D({
       color: 0xeaf1f6,
       roughness: 0.82,
       metalness: 0.02,
+      side: THREE.DoubleSide,
     })
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomWidthM, roomDepthM), floorMaterial)
-    floor.rotation.x = -Math.PI / 2
-    floor.position.set(0, 0, roomDepthM / 2)
+    const floorShape = new THREE.Shape()
+    if (isNotched) {
+      floorShape.moveTo(-roomWidthM / 2 + notchWidthM, 0)
+      floorShape.lineTo(roomWidthM / 2, 0)
+      floorShape.lineTo(roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, notchDepthM)
+      floorShape.lineTo(-roomWidthM / 2 + notchWidthM, notchDepthM)
+      floorShape.lineTo(-roomWidthM / 2 + notchWidthM, 0)
+    } else {
+      floorShape.moveTo(-roomWidthM / 2, 0)
+      floorShape.lineTo(roomWidthM / 2, 0)
+      floorShape.lineTo(roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, 0)
+    }
+    const floor = new THREE.Mesh(new THREE.ShapeGeometry(floorShape), floorMaterial)
+    floor.rotation.x = Math.PI / 2
     floor.receiveShadow = true
     scene.add(floor)
 
@@ -3772,13 +4199,23 @@ function PositionScene3D({
     grid.position.set(0, 0.012, roomDepthM / 2)
     scene.add(grid)
 
-    const outlinePoints = [
-      new THREE.Vector3(-roomWidthM / 2, 0.04, 0),
-      new THREE.Vector3(roomWidthM / 2, 0.04, 0),
-      new THREE.Vector3(roomWidthM / 2, 0.04, roomDepthM),
-      new THREE.Vector3(-roomWidthM / 2, 0.04, roomDepthM),
-      new THREE.Vector3(-roomWidthM / 2, 0.04, 0),
-    ]
+    const outlinePoints = isNotched
+      ? [
+          new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, notchDepthM),
+          new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, notchDepthM),
+          new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, 0),
+        ]
+      : [
+          new THREE.Vector3(-roomWidthM / 2, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, 0),
+        ]
     scene.add(
       new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(outlinePoints),
@@ -3786,26 +4223,69 @@ function PositionScene3D({
       ),
     )
 
-    const wall = new THREE.Mesh(
-      new THREE.PlaneGeometry(roomWidthM, wallHeightM),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.34,
-        side: THREE.DoubleSide,
-        roughness: 0.9,
-      }),
-    )
-    wall.position.set(0, wallHeightM / 2, 0)
-    wall.receiveShadow = true
-    scene.add(wall)
+    if (isNotched) {
+      const notchPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(notchWidthM, notchDepthM),
+        new THREE.MeshBasicMaterial({
+          color: 0x9aa7b3,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide,
+        }),
+      )
+      notchPlane.rotation.x = -Math.PI / 2
+      notchPlane.position.set(
+        -roomWidthM / 2 + notchWidthM / 2,
+        0.035,
+        notchDepthM / 2,
+      )
+      scene.add(notchPlane)
+    }
 
-    const wallFrame = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(roomWidthM, wallHeightM, 0.035)),
-      new THREE.LineBasicMaterial({ color: 0x6b7b88 }),
-    )
-    wallFrame.position.set(0, wallHeightM / 2, 0)
-    scene.add(wallFrame)
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+    })
+    const wallFrameMaterial = new THREE.LineBasicMaterial({ color: 0x6b7b88 })
+    const addWallPanel = (
+      widthM: number,
+      centerX: number,
+      centerZ: number,
+      rotationY = 0,
+    ) => {
+      const wall = new THREE.Mesh(
+        new THREE.PlaneGeometry(widthM, wallHeightM),
+        wallMaterial,
+      )
+      wall.rotation.y = rotationY
+      wall.position.set(centerX, wallHeightM / 2, centerZ)
+      wall.receiveShadow = true
+      scene.add(wall)
+
+      const wallFrame = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(widthM, wallHeightM, 0.035)),
+        wallFrameMaterial,
+      )
+      wallFrame.rotation.y = rotationY
+      wallFrame.position.copy(wall.position)
+      scene.add(wallFrame)
+    }
+
+    if (isNotched) {
+      addWallPanel(roomWidthM - notchWidthM, notchWidthM / 2, 0)
+      addWallPanel(notchWidthM, -roomWidthM / 2 + notchWidthM / 2, notchDepthM)
+      addWallPanel(
+        notchDepthM,
+        -roomWidthM / 2 + notchWidthM,
+        notchDepthM / 2,
+        Math.PI / 2,
+      )
+    } else {
+      addWallPanel(roomWidthM, 0, 0)
+    }
 
     const windowGlass = new THREE.Mesh(
       new THREE.PlaneGeometry(windowWidthM, windowHeightM),
@@ -3819,7 +4299,7 @@ function PositionScene3D({
         side: THREE.DoubleSide,
       }),
     )
-    windowGlass.position.set(0, windowCenterY, -0.025)
+    windowGlass.position.set(windowPlanX, windowCenterY, windowPlanZ - 0.025)
     scene.add(windowGlass)
 
     const windowFrame = new THREE.LineSegments(
@@ -3839,7 +4319,7 @@ function PositionScene3D({
         emissiveIntensity: 0.12,
       }),
     )
-    namigate.position.set(0, windowCenterY, -0.105)
+    namigate.position.set(windowPlanX, windowCenterY, windowPlanZ - 0.105)
     namigate.castShadow = true
     scene.add(namigate)
 
@@ -3891,8 +4371,8 @@ function PositionScene3D({
 
     const indoorDistanceLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.08, 0),
-        new THREE.Vector3(0, 0.08, receiverZ),
+        new THREE.Vector3(windowPlanX, 0.08, windowPlanZ),
+        new THREE.Vector3(receiverPoint.x, 0.08, receiverZ),
       ]),
       new THREE.LineDashedMaterial({
         color: 0x667788,
@@ -3906,7 +4386,7 @@ function PositionScene3D({
     const outdoorDistanceLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(transmitterX, 0.08, transmitterZ),
-        new THREE.Vector3(0, 0.08, 0),
+        new THREE.Vector3(windowPlanX, 0.08, windowPlanZ),
       ]),
       new THREE.LineDashedMaterial({
         color: 0x667788,
@@ -3939,7 +4419,7 @@ function PositionScene3D({
     const roomWidthLineZ = roomDepthM + 0.28
     const roomDepthLineX = roomWidthM / 2 + 0.28
     const windowWidthLineY = windowCenterY + windowHeightM / 2 + 0.16
-    const windowHeightLineX = -windowWidthM / 2 - 0.18
+    const windowHeightLineX = windowPlanX - windowWidthM / 2 - 0.18
 
     addDimensionLine(
       new THREE.Vector3(-roomWidthM / 2, 0.12, roomWidthLineZ),
@@ -3950,13 +4430,13 @@ function PositionScene3D({
       new THREE.Vector3(roomDepthLineX, 0.12, roomDepthM),
     )
     addDimensionLine(
-      new THREE.Vector3(-windowWidthM / 2, windowWidthLineY, -0.08),
-      new THREE.Vector3(windowWidthM / 2, windowWidthLineY, -0.08),
+      new THREE.Vector3(windowPlanX - windowWidthM / 2, windowWidthLineY, windowPlanZ - 0.08),
+      new THREE.Vector3(windowPlanX + windowWidthM / 2, windowWidthLineY, windowPlanZ - 0.08),
       0x0071bd,
     )
     addDimensionLine(
-      new THREE.Vector3(windowHeightLineX, windowBottomM, -0.08),
-      new THREE.Vector3(windowHeightLineX, windowBottomM + windowHeightM, -0.08),
+      new THREE.Vector3(windowHeightLineX, windowBottomM, windowPlanZ - 0.08),
+      new THREE.Vector3(windowHeightLineX, windowBottomM + windowHeightM, windowPlanZ - 0.08),
       0x0071bd,
     )
 
@@ -4040,10 +4520,22 @@ function PositionScene3D({
     const leftLabelX = -roomWidthM / 2 + 0.88
     const rightLabelX = roomWidthM / 2 - 0.88
     const topLabelY = wallHeightM + 0.44
-    const outdoorMidPoint = new THREE.Vector3(transmitterX / 2, 0.16, transmitterZ / 2)
-    const indoorMidPoint = new THREE.Vector3(0, 0.16, receiverZ / 2)
-    const windowTopPoint = new THREE.Vector3(0, windowBottomM + windowHeightM, -0.08)
-    const namigatePoint = new THREE.Vector3(0, windowCenterY, -0.13)
+    const outdoorMidPoint = new THREE.Vector3(
+      (transmitterX + windowPlanX) / 2,
+      0.16,
+      (transmitterZ + windowPlanZ) / 2,
+    )
+    const indoorMidPoint = new THREE.Vector3(
+      windowPlanX,
+      0.16,
+      (windowPlanZ + receiverZ) / 2,
+    )
+    const windowTopPoint = new THREE.Vector3(
+      windowPlanX,
+      windowBottomM + windowHeightM,
+      windowPlanZ - 0.08,
+    )
+    const namigatePoint = new THREE.Vector3(windowPlanX, windowCenterY, windowPlanZ - 0.13)
 
     const labels = [
       {
@@ -4063,25 +4555,37 @@ function PositionScene3D({
       },
       {
         label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'),
-        position: new THREE.Vector3(-windowWidthM / 2 - 1.05, windowCenterY + 1.08, -0.76),
+        position: new THREE.Vector3(
+          windowPlanX - windowWidthM / 2 - 1.05,
+          windowCenterY + 1.08,
+          windowPlanZ - 0.76,
+        ),
         target: windowPoint,
         color: 0xc96c34,
       },
       {
         label: makeLabel(`窓 ${numberFormatter.format(settings.windowWidthM)}×${numberFormatter.format(settings.windowHeightM)}m`, '#0071BD'),
-        position: new THREE.Vector3(0, topLabelY, -0.18),
+        position: new THREE.Vector3(windowPlanX, topLabelY, windowPlanZ - 0.18),
         target: windowTopPoint,
         color: 0x0071bd,
       },
       {
         label: makeLabel(`中心高 ${formatMeters(settings.windowCenterHeightM)}`, '#0071BD'),
-        position: new THREE.Vector3(-windowWidthM / 2 - 1.12, windowCenterY - 0.55, -0.22),
+        position: new THREE.Vector3(
+          windowPlanX - windowWidthM / 2 - 1.12,
+          windowCenterY - 0.55,
+          windowPlanZ - 0.22,
+        ),
         target: windowPoint,
         color: 0x0071bd,
       },
       {
         label: makeLabel(`ナミゲート ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(settings.namigateHeightCm)}cm`, '#0071BD'),
-        position: new THREE.Vector3(windowWidthM / 2 + 1.24, windowCenterY + 0.34, -0.24),
+        position: new THREE.Vector3(
+          windowPlanX + windowWidthM / 2 + 1.24,
+          windowCenterY + 0.34,
+          windowPlanZ - 0.24,
+        ),
         target: namigatePoint,
         color: 0x0071bd,
       },
@@ -4205,6 +4709,11 @@ function PositionScene3D({
         <div className="position-3d-help">ドラッグで回転 / ホイールで拡大</div>
         <div className="position-3d-callout-panel" aria-label="3D寸法サマリー">
           <div>
+            <span>間取り</span>
+            <strong>{getRoomLayoutPresetLabel(settings.roomLayoutPresetId)}</strong>
+            <small>{getBuildingMaterialSummary(settings)}</small>
+          </div>
+          <div>
             <span>屋外リンク</span>
             <strong>{formatMeters(calculateOutdoorLinkDistanceM(settings))}</strong>
             <small>
@@ -4239,6 +4748,13 @@ function PositionScene3D({
         </div>
       </div>
       <div className="position-3d-facts">
+        <div>
+          <span>間取り・建材</span>
+          <strong>{getRoomLayoutPresetLabel(settings.roomLayoutPresetId)}</strong>
+          <small>
+            {getRoomLayoutSummary(settings)} / {getBuildingMaterialSummary(settings)}
+          </small>
+        </div>
         <div>
           <span>3D表示</span>
           <strong>屋外から窓面へ入射</strong>
@@ -4285,27 +4801,40 @@ function HeatmapPlan({
   heatmap,
   measurementPoints,
 }: HeatmapPlanProps) {
-  const roomWidthM = Math.max(settings.roomWidthM, 1)
-  const roomDepthM = Math.max(settings.roomDepthM, 1)
+  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+    getRoomLayoutMetrics(settings)
+  const windowPosition = getWindowPlanPositionM(settings)
+  const windowXPct = clamp((windowPosition.xM / roomWidthM) * 100, 6, 94)
+  const windowYPct = clamp((windowPosition.yM / roomDepthM) * 100, 0, 92)
   const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
   const transmitterXPct = clamp(
-    50 - Math.tan(((90 - safeAngle) * Math.PI) / 180) * 22,
+    windowXPct - Math.tan(((90 - safeAngle) * Math.PI) / 180) * 22,
     10,
     90,
   )
-  const receiverYPct = clamp((settings.indoorDistanceM / roomDepthM) * 100, 9, 92)
+  const receiverYPct = clamp(
+    ((windowPosition.yM + settings.indoorDistanceM) / roomDepthM) * 100,
+    Math.max(windowYPct + 6, 9),
+    94,
+  )
   const windowWidthPct =
     scenario.key === 'noWindow'
       ? clamp((settings.windowWidthM / roomWidthM) * 100, 16, 88)
       : clamp((settings.windowWidthM / roomWidthM) * 100, 18, 88)
-  const windowLeftPct = 50 - windowWidthPct / 2
+  const windowLeftPct = clamp(windowXPct - windowWidthPct / 2, 0, 100 - windowWidthPct)
   const namigateWidthM = Math.max(settings.namigateWidthCm / 100, 0.01)
   const namigateWidthPct = clamp(
     (namigateWidthM / roomWidthM) * 100,
     5,
     Math.max(windowWidthPct, 5),
   )
-  const namigateLeftPct = 50 - namigateWidthPct / 2
+  const namigateLeftPct = clamp(
+    windowXPct - namigateWidthPct / 2,
+    0,
+    100 - namigateWidthPct,
+  )
+  const notchWidthPct = (notchWidthM / roomWidthM) * 100
+  const notchDepthPct = (notchDepthM / roomDepthM) * 100
   const hasNamigate = scenario.key === 'withNamigate'
   const scenarioMeasurements = measurementPoints.filter(
     (point) => point.scenario === scenario.key,
@@ -4324,7 +4853,7 @@ function HeatmapPlan({
           <line
             x1={transmitterXPct}
             y1="18"
-            x2="50"
+            x2={windowXPct}
             y2="56"
             stroke={scenario.color}
             strokeLinecap="round"
@@ -4332,7 +4861,7 @@ function HeatmapPlan({
           />
           <text
             className="heatmap-outdoor-label"
-            x={(transmitterXPct + 50) / 2}
+            x={(transmitterXPct + windowXPct) / 2}
             y="38"
           >
             入射角 {numberFormatter.format(safeAngle)}°
@@ -4355,16 +4884,25 @@ function HeatmapPlan({
         >
           {heatmap.cells.map((cell) => (
             <span
-              className={cell.isConnected ? 'heat-cell' : 'heat-cell is-low'}
+              className={
+                !cell.isInRoom
+                  ? 'heat-cell is-outside'
+                  : cell.isConnected
+                    ? 'heat-cell'
+                    : 'heat-cell is-low'
+              }
               key={cell.id}
-              title={`${formatDbm(cell.rsrpDbm)} / ${
-                cell.isConnected ? '接続可能' : 'しきい値未満'
-              }`}
+              title={
+                cell.isInRoom
+                  ? `${formatDbm(cell.rsrpDbm)} / ${
+                      cell.isConnected ? '接続可能' : 'しきい値未満'
+                    }`
+                  : '角欠け/屋外扱い'
+              }
               style={{
-                backgroundColor: getHeatColor(
-                  cell.rsrpDbm,
-                  settings.connectionThresholdDbm,
-                ),
+                backgroundColor: cell.isInRoom
+                  ? getHeatColor(cell.rsrpDbm, settings.connectionThresholdDbm)
+                  : undefined,
               }}
             />
           ))}
@@ -4372,6 +4910,34 @@ function HeatmapPlan({
 
         <svg className="heatmap-overlay" viewBox="0 0 100 100" aria-hidden="true">
           <line className="heatmap-wall-line" x1="0" y1="0" x2="100" y2="0" />
+          {isNotched ? (
+            <>
+              <rect
+                className="heatmap-notch"
+                x="0"
+                y="0"
+                width={notchWidthPct}
+                height={notchDepthPct}
+              />
+              <line
+                className="heatmap-wall-line"
+                x1={notchWidthPct}
+                y1="0"
+                x2={notchWidthPct}
+                y2={notchDepthPct}
+              />
+              <line
+                className="heatmap-wall-line"
+                x1="0"
+                y1={notchDepthPct}
+                x2={notchWidthPct}
+                y2={notchDepthPct}
+              />
+              <text className="heatmap-dimension-label" x="2.4" y={notchDepthPct / 2}>
+                角欠け
+              </text>
+            </>
+          ) : null}
           <line className="heatmap-dimension-line" x1="0" y1="96" x2="100" y2="96" />
           <line className="heatmap-dimension-line" x1="96" y1="0" x2="96" y2="100" />
           <rect
@@ -4381,7 +4947,7 @@ function HeatmapPlan({
                 : 'heatmap-window'
             }
             x={windowLeftPct}
-            y="-1.8"
+            y={windowYPct - 1.8}
             width={windowWidthPct}
             height="4.8"
             rx="1.4"
@@ -4390,7 +4956,7 @@ function HeatmapPlan({
             <rect
               className="heatmap-namigate"
               x={namigateLeftPct}
-              y="-3.2"
+              y={windowYPct - 3.2}
               width={namigateWidthPct}
               height="7.6"
               rx="1.6"
@@ -4398,22 +4964,22 @@ function HeatmapPlan({
           ) : null}
           <path
             className="heatmap-indoor-ray"
-            d={`M 50 0 L 50 ${receiverYPct}`}
+            d={`M ${windowXPct} ${windowYPct} L ${windowXPct} ${receiverYPct}`}
             stroke={scenario.color}
           />
           <circle
             className="heatmap-receiver-dot"
-            cx="50"
+            cx={windowXPct}
             cy={receiverYPct}
             r="4"
           />
           <circle
             className="heatmap-receiver-core"
-            cx="50"
+            cx={windowXPct}
             cy={receiverYPct}
             r="1.6"
           />
-          <text className="heatmap-overlay-label" x="51.8" y={receiverYPct - 3}>
+          <text className="heatmap-overlay-label" x={windowXPct + 1.8} y={receiverYPct - 3}>
             受信機
           </text>
           <text
@@ -4433,14 +4999,18 @@ function HeatmapPlan({
           >
             奥行 {numberFormatter.format(settings.roomDepthM)}m
           </text>
-          <text className="heatmap-dimension-label" x="52" y={receiverYPct / 2}>
+          <text
+            className="heatmap-dimension-label"
+            x={windowXPct + 2}
+            y={(windowYPct + receiverYPct) / 2}
+          >
             室内 {formatMeters(settings.indoorDistanceM)}
           </text>
-          <text className="heatmap-overlay-label" x={windowLeftPct} y="8.5">
+          <text className="heatmap-overlay-label" x={windowLeftPct} y={windowYPct + 8.5}>
             窓 {numberFormatter.format(settings.windowWidthM)}m
           </text>
           {hasNamigate ? (
-            <text className="heatmap-overlay-accent" x={namigateLeftPct} y="15">
+            <text className="heatmap-overlay-accent" x={namigateLeftPct} y={windowYPct + 15}>
               ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm
             </text>
           ) : null}
@@ -4488,6 +5058,10 @@ function HeatmapPlan({
         <span>窓幅 {numberFormatter.format(settings.windowWidthM)}m</span>
         <span>窓高 {numberFormatter.format(settings.windowHeightM)}m</span>
         <span>窓中心高 {formatMeters(settings.windowCenterHeightM)}</span>
+        <span>
+          間取り {getRoomLayoutPresetLabel(settings.roomLayoutPresetId)}
+        </span>
+        <span>建材 {getBuildingMaterialPresetLabel(settings.buildingMaterialPresetId)}</span>
         <span>室内3D {formatMeters(calculateIndoorLinkDistanceM(settings))}</span>
         <span>受信高 {formatMeters(settings.rxAntennaHeightM)}</span>
         {hasNamigate ? (
@@ -5099,7 +5673,7 @@ function App() {
     0,
   )
   const recoveryRate = windowGapDb <= 0 ? 100 : (recoveredGapDb / windowGapDb) * 100
-  const roomAreaM2 = Math.max(settings.roomWidthM, 1) * Math.max(settings.roomDepthM, 1)
+  const roomAreaM2 = calculateEffectiveRoomAreaM2(settings)
   const measuredResiduals = measuredComparisons
     .map((comparison) => comparison.residualDb)
     .filter((value): value is number => value !== null)
@@ -5612,6 +6186,53 @@ function App() {
     }))
   }
 
+  const handleRoomLayoutPresetChange = (presetId: RoomLayoutPresetId) => {
+    const preset = ROOM_LAYOUT_PRESETS.find((item) => item.id === presetId)
+
+    if (!preset) {
+      return
+    }
+
+    setSalesPresetId('custom')
+    setSettings((current) => ({
+      ...current,
+      ...preset.settings,
+    }))
+  }
+
+  const handleWindowSizePresetChange = (presetId: WindowSizePresetId) => {
+    const preset = WINDOW_SIZE_PRESETS.find((item) => item.id === presetId)
+
+    if (!preset) {
+      return
+    }
+
+    setSalesPresetId('custom')
+    setSettings((current) => ({
+      ...current,
+      windowSizePresetId: presetId,
+      windowWidthM: preset.widthM ?? current.windowWidthM,
+      windowHeightM: preset.heightM ?? current.windowHeightM,
+    }))
+  }
+
+  const handleBuildingMaterialPresetChange = (
+    presetId: BuildingMaterialPresetId,
+  ) => {
+    const preset = BUILDING_MATERIAL_PRESETS.find((item) => item.id === presetId)
+
+    if (!preset) {
+      return
+    }
+
+    setSalesPresetId('custom')
+    setSettings((current) => ({
+      ...current,
+      buildingMaterialPresetId: presetId,
+      buildingMaterialLossDb: preset.lossDb ?? current.buildingMaterialLossDb,
+    }))
+  }
+
   const handleSalesPresetChange = (presetId: SalesPresetId) => {
     const preset = SALES_PRESETS.find((item) => item.id === presetId)
 
@@ -5625,7 +6246,7 @@ function App() {
       setSettings((current) => ({
         ...current,
         ...preset.settings,
-        modulePresetId: 'custom',
+        modulePresetId: preset.settings?.modulePresetId ?? 'custom',
       }))
     }
 
@@ -6031,6 +6652,66 @@ function App() {
                 </select>
                 <small>{selectedSalesPreset.description}</small>
               </label>
+              <label className="control">
+                <TermLabel
+                  label="間取りプリセット"
+                  help="長方形の部屋か、前面左角が欠けたL字間取りを選びます。角欠けでは欠けた部分の奥壁にある窓を送受信の基準にします。"
+                />
+                <select
+                  value={settings.roomLayoutPresetId}
+                  onChange={(event) =>
+                    handleRoomLayoutPresetChange(
+                      event.target.value as RoomLayoutPresetId,
+                    )
+                  }
+                >
+                  {ROOM_LAYOUT_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="control">
+                <TermLabel
+                  label="窓サイズプリセット"
+                  help="窓幅と窓高さをまとめて選びます。実測図面がある場合は任意サイズにして数値を直接調整します。"
+                />
+                <select
+                  value={settings.windowSizePresetId}
+                  onChange={(event) =>
+                    handleWindowSizePresetChange(
+                      event.target.value as WindowSizePresetId,
+                    )
+                  }
+                >
+                  {WINDOW_SIZE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="control">
+                <TermLabel
+                  label="建物材質"
+                  help="初期値は鉄筋コンクリートです。窓面直達を主経路としつつ、躯体・外壁による保守的な追加損失を反映します。"
+                />
+                <select
+                  value={settings.buildingMaterialPresetId}
+                  onChange={(event) =>
+                    handleBuildingMaterialPresetChange(
+                      event.target.value as BuildingMaterialPresetId,
+                    )
+                  }
+                >
+                  {BUILDING_MATERIAL_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <NumberInput
                 label="周波数"
                 value={settings.frequencyMHz}
@@ -6395,6 +7076,66 @@ function App() {
             </div>
             <ParameterGuidance stepId="windowRoom" />
             <label className="control">
+              <TermLabel
+                label="間取りプリセット"
+                help="長方形または角欠けのL字間取りを選びます。角欠けでは欠け奥の窓が送受信基準になります。"
+              />
+              <select
+                value={settings.roomLayoutPresetId}
+                onChange={(event) =>
+                  handleRoomLayoutPresetChange(
+                    event.target.value as RoomLayoutPresetId,
+                  )
+                }
+              >
+                {ROOM_LAYOUT_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="control">
+              <TermLabel
+                label="窓サイズプリセット"
+                help="窓幅と窓高さをまとめて選びます。手入力すると任意サイズになります。"
+              />
+              <select
+                value={settings.windowSizePresetId}
+                onChange={(event) =>
+                  handleWindowSizePresetChange(
+                    event.target.value as WindowSizePresetId,
+                  )
+                }
+              >
+                {WINDOW_SIZE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="control">
+              <TermLabel
+                label="建物材質"
+                help="初期は鉄筋コンクリートです。躯体・外壁による保守的な追加損失を計算へ反映します。"
+              />
+              <select
+                value={settings.buildingMaterialPresetId}
+                onChange={(event) =>
+                  handleBuildingMaterialPresetChange(
+                    event.target.value as BuildingMaterialPresetId,
+                  )
+                }
+              >
+                {BUILDING_MATERIAL_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="control">
               <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
               <select
                 value={settings.windowPresetId}
@@ -6426,7 +7167,10 @@ function App() {
               min={0.2}
               step={0.1}
               unit="m"
-              onChange={(value) => updateSetting('windowWidthM', value)}
+              onChange={(value) => {
+                updateSetting('windowSizePresetId', 'custom')
+                updateSetting('windowWidthM', value)
+              }}
             />
             <NumberInput
               label="窓高さ"
@@ -6434,7 +7178,10 @@ function App() {
               min={0.2}
               step={0.1}
               unit="m"
-              onChange={(value) => updateSetting('windowHeightM', value)}
+              onChange={(value) => {
+                updateSetting('windowSizePresetId', 'custom')
+                updateSetting('windowHeightM', value)
+              }}
             />
             <NumberInput
               label="窓中心高"
@@ -6474,7 +7221,10 @@ function App() {
               min={1}
               step={0.5}
               unit="m"
-              onChange={(value) => updateSetting('roomWidthM', value)}
+              onChange={(value) => {
+                updateSetting('roomLayoutPresetId', 'custom')
+                updateSetting('roomWidthM', value)
+              }}
             />
             <NumberInput
               label="部屋奥行"
@@ -6482,8 +7232,40 @@ function App() {
               min={1}
               step={0.5}
               unit="m"
-              onChange={(value) => updateSetting('roomDepthM', value)}
+              onChange={(value) => {
+                updateSetting('roomLayoutPresetId', 'custom')
+                updateSetting('roomDepthM', value)
+              }}
             />
+            {settings.roomLayoutPresetId === 'notchedCornerWindow' ||
+            settings.roomLayoutPresetId === 'custom' ? (
+              <>
+                <NumberInput
+                  label="角欠け幅"
+                  value={settings.notchWidthM}
+                  min={0}
+                  step={0.5}
+                  unit="m"
+                  help="前面左角から横方向に欠けている幅です。角欠け部窓では、この欠け奥の壁に窓がある前提です。"
+                  onChange={(value) => {
+                    updateSetting('roomLayoutPresetId', 'custom')
+                    updateSetting('notchWidthM', value)
+                  }}
+                />
+                <NumberInput
+                  label="角欠け奥行"
+                  value={settings.notchDepthM}
+                  min={0}
+                  step={0.5}
+                  unit="m"
+                  help="前面左角から奥方向に欠けている深さです。ヒートマップではこの範囲を屋外/欠け部として除外します。"
+                  onChange={(value) => {
+                    updateSetting('roomLayoutPresetId', 'custom')
+                    updateSetting('notchDepthM', value)
+                  }}
+                />
+              </>
+            ) : null}
             <NumberInput
               label="室内距離"
               value={settings.indoorDistanceM}
@@ -6514,6 +7296,18 @@ function App() {
               step={0.5}
               unit="dB"
               onChange={(value) => updateSetting('indoorObstacleLossDb', value)}
+            />
+            <NumberInput
+              label="建物材質補正損失"
+              value={settings.buildingMaterialLossDb}
+              min={0}
+              step={0.5}
+              unit="dB"
+              help="建物材質プリセットで設定される追加損失です。窓面直達以外の躯体・外壁影響を保守的に見る値です。"
+              onChange={(value) => {
+                updateSetting('buildingMaterialPresetId', 'custom')
+                updateSetting('buildingMaterialLossDb', value)
+              }}
             />
           </details>
 
@@ -6886,6 +7680,12 @@ function App() {
               <p>{salesComment}</p>
             </div>
             <div className="sales-detail-list" aria-label="簡易モードの主要条件">
+              <span>間取り {getRoomLayoutPresetLabel(settings.roomLayoutPresetId)}</span>
+              <span>建材 {getBuildingMaterialPresetLabel(settings.buildingMaterialPresetId)}</span>
+              <span>
+                窓 {numberFormatter.format(settings.windowWidthM)}×
+                {numberFormatter.format(settings.windowHeightM)}m
+              </span>
               <span>窓損失 {formatDb(effectiveWindowLossDb)}</span>
               <span>入射角損失 {formatDb(angleLossDb)}</span>
               <span>ナミゲート適用改善 {formatDb(appliedNamigateGainDb)}</span>

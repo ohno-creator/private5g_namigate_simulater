@@ -2602,6 +2602,138 @@
   stroke-width: 2.6;
 }
 
+.heatmap-left-wall-line {
+  stroke-width: 3;
+}
+
+.diagonal-angle-guide {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #dce6ee;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.diagonal-angle-guide .subsection-heading h3 {
+  font-size: 12px;
+}
+
+.diagonal-angle-guide .subsection-heading span {
+  font-size: 10px;
+}
+
+.diagonal-angle-guide svg {
+  display: block;
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid #edf3f7;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.diagonal-guide-outdoor {
+  fill: rgba(0, 113, 189, 0.08);
+}
+
+.diagonal-guide-room {
+  fill: rgba(255, 255, 255, 0.88);
+  stroke: #2f3f4f;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.diagonal-guide-left-wall {
+  stroke: #16212c;
+  stroke-linecap: round;
+  stroke-width: 2.6;
+}
+
+.diagonal-guide-window-axis {
+  stroke: #0071bd;
+  stroke-linecap: round;
+  stroke-width: 4.2;
+}
+
+.diagonal-guide-window {
+  fill: rgba(223, 242, 251, 0.94);
+  stroke: #0071bd;
+  stroke-width: 1.3;
+}
+
+.diagonal-guide-window.is-reference {
+  fill: rgba(255, 255, 255, 0.56);
+  stroke-dasharray: 2 2;
+}
+
+.diagonal-guide-namigate {
+  fill: rgba(0, 113, 189, 0.34);
+  stroke: #0071bd;
+  stroke-width: 1.5;
+}
+
+.diagonal-guide-normal {
+  stroke: #6f7f8d;
+  stroke-dasharray: 3 2;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.diagonal-guide-ray,
+.diagonal-guide-indoor-ray {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2.3;
+}
+
+.diagonal-guide-indoor-ray {
+  stroke: #667788;
+  stroke-dasharray: 3 2;
+}
+
+.diagonal-guide-angle-arc {
+  fill: none;
+  stroke: #c96c34;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.diagonal-guide-transmitter {
+  fill: #16212c;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+}
+
+.diagonal-guide-receiver {
+  fill: #ffffff;
+  stroke: #0071bd;
+  stroke-width: 1.6;
+}
+
+.diagonal-guide-label,
+.diagonal-guide-accent,
+.diagonal-guide-muted {
+  font-size: 4px;
+  font-weight: 900;
+  letter-spacing: 0;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 1px;
+}
+
+.diagonal-guide-label {
+  fill: #172330;
+}
+
+.diagonal-guide-accent {
+  fill: #c96c34;
+}
+
+.diagonal-guide-muted {
+  fill: #657380;
+}
+
 .heatmap-notch {
   fill: rgba(123, 137, 150, 0.18);
   stroke: rgba(47, 63, 79, 0.62);

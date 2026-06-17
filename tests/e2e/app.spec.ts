@@ -272,6 +272,9 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   await expect(page.locator('.heatmap-plan-legend').first()).toContainText(
     '斜め角欠け',
   )
+  await expect(page.getByLabel('斜め窓の入射角補助図')).toHaveCount(3)
+  await expect(page.getByText('斜め窓面（水平化）').first()).toBeVisible()
+  await expect(page.locator('.heatmap-left-wall-line')).toHaveCount(3)
   await expect(page.locator('.heatmap-notch').first()).toBeVisible()
   await expect(page.locator('.position-3d-facts')).toContainText('斜め角欠け')
   const diagonalCanvasInfo = await page

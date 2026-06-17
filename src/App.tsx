@@ -249,6 +249,11 @@ type HeatmapPlanProps = {
   measurementPoints: MeasurementPoint[]
 }
 
+type PlanPoint = {
+  xM: number
+  yM: number
+}
+
 type MeasurementPoint = {
   id: string
   name: string
@@ -2396,6 +2401,17 @@ function getWindowFaceGeometryM(settings: Settings) {
 
 function getWindowPlanPositionM(settings: Settings) {
   return getWindowFaceGeometryM(settings).center
+}
+
+function toWindowLocalPoint(settings: Settings, point: PlanPoint) {
+  const face = getWindowFaceGeometryM(settings)
+  const dxM = point.xM - face.center.xM
+  const dyM = point.yM - face.center.yM
+
+  return {
+    uM: dxM * face.tangent.xM + dyM * face.tangent.yM,
+    vM: dxM * face.inwardNormal.xM + dyM * face.inwardNormal.yM,
+  }
 }
 
 function getReceiverPlanPositionM(
@@ -4997,12 +5013,15 @@ function PositionScene3D({
     if (isDiagonalNotched) {
       addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: roomWidthM, yM: 0 })
       addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: 0, yM: notchDepthM })
+      addWallSegment({ xM: 0, yM: notchDepthM }, { xM: 0, yM: roomDepthM })
     } else if (isNotched) {
       addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: roomWidthM, yM: 0 })
       addWallSegment({ xM: 0, yM: notchDepthM }, { xM: notchWidthM, yM: notchDepthM })
       addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: notchWidthM, yM: notchDepthM })
+      addWallSegment({ xM: 0, yM: notchDepthM }, { xM: 0, yM: roomDepthM })
     } else {
       addWallSegment({ xM: 0, yM: 0 }, { xM: roomWidthM, yM: 0 })
+      addWallSegment({ xM: 0, yM: 0 }, { xM: 0, yM: roomDepthM })
     }
 
     const windowGlass = new THREE.Mesh(
@@ -5345,6 +5364,20 @@ function PositionScene3D({
       },
     ]
 
+    if (isNotched) {
+      const leftWallMidZ = (notchDepthM + roomDepthM) / 2
+      labels.push({
+        label: makeLabel('左側壁', '#5d6b78'),
+        position: new THREE.Vector3(
+          -roomWidthM / 2 - 0.95,
+          Math.min(topLabelY, wallHeightM * 0.84),
+          leftWallMidZ,
+        ),
+        target: new THREE.Vector3(-roomWidthM / 2, wallHeightM * 0.52, leftWallMidZ),
+        color: 0x6f7f8d,
+      })
+    }
+
     labels.forEach(({ label, position, target, color }) => {
       label.position.copy(position)
       scene.add(label)
@@ -5524,6 +5557,200 @@ function PositionScene3D({
   )
 }
 
+function DiagonalWindowAngleGuide({
+  settings,
+  scenario,
+  hasNamigate,
+}: {
+  settings: Settings
+  scenario: ScenarioDefinition
+  hasNamigate: boolean
+}) {
+  const {
+    roomWidthM,
+    roomDepthM,
+    notchWidthM,
+    notchDepthM,
+  } = getRoomLayoutMetrics(settings)
+  const face = getWindowFaceGeometryM(settings)
+  const receiver = getReceiverPlanPositionM(settings)
+  const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+  const outdoorDisplayM = clamp(
+    Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.1,
+    2.4,
+    6.8,
+  )
+  const lateralOffsetM =
+    Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM
+  const transmitterLocal = {
+    uM: -lateralOffsetM,
+    vM: -outdoorDisplayM,
+  }
+  const receiverLocal = toWindowLocalPoint(settings, receiver)
+  const roomOutlineLocal = [
+    { xM: notchWidthM, yM: 0 },
+    { xM: roomWidthM, yM: 0 },
+    { xM: roomWidthM, yM: roomDepthM },
+    { xM: 0, yM: roomDepthM },
+    { xM: 0, yM: notchDepthM },
+  ].map((point) => toWindowLocalPoint(settings, point))
+  const leftWallLocal = [
+    toWindowLocalPoint(settings, { xM: 0, yM: notchDepthM }),
+    toWindowLocalPoint(settings, { xM: 0, yM: roomDepthM }),
+  ]
+  const horizontalWindowWidthM = Math.min(settings.windowWidthM, face.lengthM)
+  const halfWindowM = Math.max(horizontalWindowWidthM / 2, 0.2)
+  const namigateHalfWidthM = Math.min(settings.namigateWidthCm / 100 / 2, halfWindowM)
+  const normalLengthM = Math.max(1.2, Math.min(outdoorDisplayM * 0.58, 2.8))
+  const fitPoints = [
+    ...roomOutlineLocal,
+    ...leftWallLocal,
+    transmitterLocal,
+    receiverLocal,
+    { uM: -halfWindowM, vM: 0 },
+    { uM: halfWindowM, vM: 0 },
+    { uM: 0, vM: -normalLengthM },
+  ]
+  const minU = Math.min(...fitPoints.map((point) => point.uM)) - 0.4
+  const maxU = Math.max(...fitPoints.map((point) => point.uM)) + 0.4
+  const minV = Math.min(...fitPoints.map((point) => point.vM)) - 0.35
+  const maxV = Math.max(...fitPoints.map((point) => point.vM)) + 0.55
+  const mapX = (uM: number) =>
+    8 + ((uM - minU) / Math.max(maxU - minU, 0.1)) * 84
+  const mapY = (vM: number) =>
+    12 + ((vM - minV) / Math.max(maxV - minV, 0.1)) * 76
+  const pointString = roomOutlineLocal
+    .map((point) => `${mapX(point.uM)},${mapY(point.vM)}`)
+    .join(' ')
+  const windowY = mapY(0)
+  const windowStartX = mapX(-halfWindowM)
+  const windowEndX = mapX(halfWindowM)
+  const normalTopY = mapY(-normalLengthM)
+  const transmitterX = mapX(transmitterLocal.uM)
+  const transmitterY = mapY(transmitterLocal.vM)
+  const receiverX = mapX(receiverLocal.uM)
+  const receiverY = mapY(receiverLocal.vM)
+  const leftWallStart = leftWallLocal[0]
+  const leftWallEnd = leftWallLocal[1]
+  const labelX = clamp((transmitterX + 50) / 2, 20, 68)
+  const labelY = clamp((transmitterY + windowY) / 2 - 2, 18, 58)
+
+  return (
+    <div className="diagonal-angle-guide" aria-label="斜め窓の入射角補助図">
+      <div className="subsection-heading">
+        <h3>斜め窓の入射角</h3>
+        <span>窓面を水平に置き直した見方</span>
+      </div>
+      <svg viewBox="0 0 100 100" role="img" aria-label="斜め窓を水平化した入射角の図">
+        <defs>
+          <marker
+            id={`angle-arrow-${scenario.key}`}
+            markerHeight="5"
+            markerWidth="6"
+            orient="auto"
+            refX="5.5"
+            refY="2.5"
+          >
+            <path d="M0,0 L6,2.5 L0,5 Z" fill={scenario.color} />
+          </marker>
+        </defs>
+        <rect className="diagonal-guide-outdoor" x="0" y="0" width="100" height={windowY} />
+        <polygon className="diagonal-guide-room" points={pointString} />
+        <line
+          className="diagonal-guide-left-wall"
+          x1={mapX(leftWallStart.uM)}
+          y1={mapY(leftWallStart.vM)}
+          x2={mapX(leftWallEnd.uM)}
+          y2={mapY(leftWallEnd.vM)}
+        />
+        <line
+          className="diagonal-guide-window-axis"
+          x1={windowStartX}
+          y1={windowY}
+          x2={windowEndX}
+          y2={windowY}
+        />
+        <rect
+          className={
+            scenario.key === 'noWindow'
+              ? 'diagonal-guide-window is-reference'
+              : 'diagonal-guide-window'
+          }
+          x={windowStartX}
+          y={windowY - 2.2}
+          width={windowEndX - windowStartX}
+          height="4.4"
+          rx="1.4"
+        />
+        {hasNamigate ? (
+          <rect
+            className="diagonal-guide-namigate"
+            x={mapX(-namigateHalfWidthM)}
+            y={windowY - 4.2}
+            width={mapX(namigateHalfWidthM) - mapX(-namigateHalfWidthM)}
+            height="8.4"
+            rx="1.5"
+          />
+        ) : null}
+        <line
+          className="diagonal-guide-normal"
+          x1="50"
+          y1={normalTopY}
+          x2="50"
+          y2={windowY}
+        />
+        <line
+          className="diagonal-guide-ray"
+          markerEnd={`url(#angle-arrow-${scenario.key})`}
+          stroke={scenario.color}
+          x1={transmitterX}
+          y1={transmitterY}
+          x2="50"
+          y2={windowY}
+        />
+        <path
+          className="diagonal-guide-angle-arc"
+          d={`M 50 ${windowY - 14} Q ${labelX} ${labelY} ${transmitterX} ${transmitterY + 7}`}
+        />
+        <line
+          className="diagonal-guide-indoor-ray"
+          x1="50"
+          y1={windowY}
+          x2={receiverX}
+          y2={receiverY}
+        />
+        <circle className="diagonal-guide-transmitter" cx={transmitterX} cy={transmitterY} r="3.2" />
+        <circle className="diagonal-guide-receiver" cx={receiverX} cy={receiverY} r="3.4" />
+        <text className="diagonal-guide-label" x={transmitterX + 2.8} y={transmitterY - 2.8}>
+          送信機
+        </text>
+        <text className="diagonal-guide-label" textAnchor="middle" x="50" y={windowY - 5.5}>
+          斜め窓面（水平化）
+        </text>
+        <text className="diagonal-guide-accent" textAnchor="middle" x="50" y={windowY + 8.7}>
+          法線基準 入射角 {numberFormatter.format(safeAngle)}°
+        </text>
+        <text
+          className="diagonal-guide-label"
+          x={mapX(leftWallEnd.uM) + 1.5}
+          y={mapY((leftWallStart.vM + leftWallEnd.vM) / 2)}
+        >
+          左側壁
+        </text>
+        <text className="diagonal-guide-label" x={receiverX + 2.6} y={receiverY - 2.6}>
+          受信機
+        </text>
+        <text className="diagonal-guide-muted" x="4" y="9">
+          屋外側
+        </text>
+        <text className="diagonal-guide-muted" x="4" y="95">
+          室内側
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 function HeatmapPlan({
   settings,
   scenario,
@@ -5666,6 +5893,13 @@ function HeatmapPlan({
             y1="0"
             x2="100"
             y2="0"
+          />
+          <line
+            className="heatmap-wall-line heatmap-left-wall-line"
+            x1="0"
+            y1={isNotched ? notchDepthPct : 0}
+            x2="0"
+            y2="100"
           />
           {isNotched ? (
             isDiagonalNotched ? (
@@ -5829,6 +6063,14 @@ function HeatmapPlan({
           })}
         </svg>
       </div>
+
+      {isDiagonalNotched ? (
+        <DiagonalWindowAngleGuide
+          hasNamigate={hasNamigate}
+          scenario={scenario}
+          settings={settings}
+        />
+      ) : null}
 
       <div className="heatmap-plan-legend">
         <span>部屋幅 {numberFormatter.format(settings.roomWidthM)}m</span>

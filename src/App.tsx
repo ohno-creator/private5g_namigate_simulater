@@ -5855,7 +5855,6 @@ function DiagonalWindowAngleGuide({
   const face = getWindowFaceGeometryM(settings)
   const receiver = getReceiverPlanPositionM(settings)
   const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
-  const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
   const outdoorDisplayM = clamp(
     Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.1,
     2.4,
@@ -5915,30 +5914,31 @@ function DiagonalWindowAngleGuide({
   const leftWallStart = leftWallLocal[0]
   const leftWallEnd = leftWallLocal[1]
   const incidentUnit = getIncidentRayLocalUnit(safeAngle)
+  const angleRad = (safeAngle * Math.PI) / 180
   const arcRadiusM = Math.min(normalLengthM * 0.44, outdoorDisplayM * 0.25, 1.05)
-  const arcStart = { uM: 0, vM: -arcRadiusM }
-  const arcEnd = {
+  const surfaceArcStart = { uM: -arcRadiusM, vM: 0 }
+  const surfaceArcEnd = {
     uM: incidentUnit.uM * arcRadiusM,
     vM: incidentUnit.vM * arcRadiusM,
   }
   const arcRadiusPx = arcRadiusM * scale
-  const normalOffsetRad = (normalOffsetDeg * Math.PI) / 180
-  const angleLabelPoint = {
-    uM: -Math.sin(normalOffsetRad / 2) * (arcRadiusM + 0.48),
-    vM: -Math.cos(normalOffsetRad / 2) * (arcRadiusM + 0.48),
+  const surfaceAngleLabelPoint = {
+    uM: -Math.cos(angleRad / 2) * (arcRadiusM + 0.62),
+    vM: -Math.max(Math.sin(angleRad / 2) * (arcRadiusM + 0.62), 0.34),
   }
-  const angleArcPath =
-    normalOffsetDeg < 0.5
-      ? ''
-      : `M ${mapX(arcStart.uM)} ${mapY(arcStart.vM)} A ${arcRadiusPx} ${arcRadiusPx} 0 0 0 ${mapX(
-          arcEnd.uM,
-        )} ${mapY(arcEnd.vM)}`
+  const surfaceAngleLabelX = clamp(mapX(surfaceAngleLabelPoint.uM) - 4, 12, 46)
+  const surfaceAngleLabelY = Math.max(12, windowY - 13)
+  const surfaceAngleArcPath = `M ${mapX(surfaceArcStart.uM)} ${mapY(
+    surfaceArcStart.vM,
+  )} A ${arcRadiusPx} ${arcRadiusPx} 0 0 1 ${mapX(surfaceArcEnd.uM)} ${mapY(
+    surfaceArcEnd.vM,
+  )}`
 
   return (
     <div className="diagonal-angle-guide" aria-label="斜め窓の入射角補助図">
       <div className="subsection-heading">
         <h3>斜め窓の入射角</h3>
-        <span>90°が正面入射、法線ずれも併記</span>
+        <span>窓面と電波経路がなす角度を表示</span>
       </div>
       <svg viewBox="0 0 100 100" role="img" aria-label="斜め窓を水平化した入射角の図">
         <defs>
@@ -6009,15 +6009,15 @@ function DiagonalWindowAngleGuide({
         />
         <path
           className="diagonal-guide-angle-arc"
-          d={angleArcPath}
+          d={surfaceAngleArcPath}
         />
         <text
-          className="diagonal-guide-accent diagonal-guide-angle-label"
+          className="diagonal-guide-accent diagonal-guide-surface-angle-label"
           textAnchor="middle"
-          x={mapX(angleLabelPoint.uM)}
-          y={mapY(angleLabelPoint.vM) - 1.5}
+          x={surfaceAngleLabelX}
+          y={surfaceAngleLabelY}
         >
-          法線ずれ {numberFormatter.format(normalOffsetDeg)}°
+          窓面との角度 {numberFormatter.format(safeAngle)}°
         </text>
         <line
           className="diagonal-guide-indoor-ray"
@@ -6031,13 +6031,10 @@ function DiagonalWindowAngleGuide({
         <text className="diagonal-guide-label" x={transmitterX + 2.8} y={transmitterY - 2.8}>
           送信機
         </text>
-        <text className="diagonal-guide-label" textAnchor="middle" x="50" y={windowY - 5.5}>
-          斜め窓面（水平化）
+        <text className="diagonal-guide-label" textAnchor="middle" x="50" y={windowY + 7.4}>
+          窓面基準線（水平化）
         </text>
-        <text className="diagonal-guide-accent" textAnchor="middle" x="50" y={windowY + 8.7}>
-          窓面基準 入射角 {numberFormatter.format(safeAngle)}°
-        </text>
-        <text className="diagonal-guide-muted" textAnchor="middle" x="53.8" y={(normalTopY + windowY) / 2}>
+        <text className="diagonal-guide-muted" textAnchor="middle" x="55.4" y={(normalTopY + windowY) / 2}>
           法線
         </text>
         <text

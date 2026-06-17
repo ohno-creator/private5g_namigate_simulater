@@ -279,8 +279,8 @@ test('営業用簡易モードで入力プリセットを選択できる', async
     '斜め角欠け',
   )
   await expect(page.getByLabel('斜め窓の入射角補助図')).toHaveCount(3)
-  await expect(page.getByText('斜め窓面（水平化）').first()).toBeVisible()
-  await expect(page.getByText('窓面基準 入射角 45°').first()).toBeVisible()
+  await expect(page.getByText('窓面基準線（水平化）').first()).toBeVisible()
+  await expect(page.getByText('窓面との角度 45°').first()).toBeVisible()
   await expect(page.getByText('法線ずれ 45°').first()).toBeVisible()
   await expect(page.getByText('法線基準')).toHaveCount(0)
   await expect(page.locator('.heatmap-left-wall-line')).toHaveCount(3)

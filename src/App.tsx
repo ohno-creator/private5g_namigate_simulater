@@ -22,6 +22,15 @@ type WindowPresetId =
   | 'double'
   | 'lowE'
   | 'metalFilm'
+  | 'jisFloatR3202'
+  | 'jisFrostedR3202'
+  | 'jisWiredR3204'
+  | 'jisLaminatedR3205'
+  | 'jisTemperedR3206'
+  | 'jisHeatAbsorbingR3208'
+  | 'jisInsulatingR3209'
+  | 'jisLowEInsulatingR3209'
+  | 'jisSolarReflectiveR3221'
   | 'custom'
 
 type NamigatePresetId = 'conservative' | 'standard' | 'lowEExample' | 'custom'
@@ -135,6 +144,7 @@ type NumberInputProps = {
   step?: number
   unit?: string
   help?: string
+  hint?: string
 }
 
 type ScenarioResult = {
@@ -852,13 +862,98 @@ const WINDOW_PRESETS: {
   id: WindowPresetId
   label: string
   lossDb: number | null
+  description: string
 }[] = [
-  { id: 'none', label: '窓なし', lossDb: 0 },
-  { id: 'single', label: '通常ガラス', lossDb: 3 },
-  { id: 'double', label: '複層ガラス', lossDb: 10 },
-  { id: 'lowE', label: 'Low-Eガラス', lossDb: 40 },
-  { id: 'metalFilm', label: '金属膜入りガラス', lossDb: 30 },
-  { id: 'custom', label: '任意', lossDb: null },
+  {
+    id: 'none',
+    label: '窓なし',
+    lossDb: 0,
+    description: '窓を開けた状態、または窓損失を除いた基準状態です。',
+  },
+  {
+    id: 'single',
+    label: '通常ガラス（約3dB）',
+    lossDb: 3,
+    description: '金属膜のない単板ガラスを想定した初期値です。実測では窓開放との差分で校正します。',
+  },
+  {
+    id: 'double',
+    label: '複層ガラス（約10dB）',
+    lossDb: 10,
+    description: '2枚以上のガラスと中空層を持つ窓の目安です。Low-E膜の有無で損失は大きく変わります。',
+  },
+  {
+    id: 'lowE',
+    label: 'Low-Eガラス（約40dB）',
+    lossDb: 40,
+    description: '低放射膜や金属膜の影響が大きい条件の保守的な初期値です。',
+  },
+  {
+    id: 'metalFilm',
+    label: '金属膜入りガラス（約30dB）',
+    lossDb: 30,
+    description: '熱線反射膜、金属膜、金属系フィルムなどを含む窓の初期仮説です。',
+  },
+  {
+    id: 'jisFloatR3202',
+    label: 'JIS R 3202 フロート/磨き板ガラス（約3dB）',
+    lossDb: 3,
+    description: '建築用の透明板ガラス系です。JISはRF減衰を規定しないため、通常ガラス相当の概算値です。',
+  },
+  {
+    id: 'jisFrostedR3202',
+    label: 'JIS R 3202 すり板ガラス（約4dB）',
+    lossDb: 4,
+    description: 'つや消し表面の板ガラスです。金属膜なし前提で、通常ガラスより少し大きい仮説値です。',
+  },
+  {
+    id: 'jisWiredR3204',
+    label: 'JIS R 3204 網入/線入板ガラス（約25dB）',
+    lossDb: 25,
+    description: '金属網または金属線を含むため、Sub6帯では大きめの損失を置く初期仮説です。',
+  },
+  {
+    id: 'jisLaminatedR3205',
+    label: 'JIS R 3205 合わせガラス（約6dB）',
+    lossDb: 6,
+    description: '複数の板ガラスと中間膜を持つ構成です。金属膜なしなら単板よりやや大きい目安です。',
+  },
+  {
+    id: 'jisTemperedR3206',
+    label: 'JIS R 3206 強化ガラス（約3dB）',
+    lossDb: 3,
+    description: '熱処理で強度を高めたガラスです。金属膜なしならフロート板ガラスに近い初期値です。',
+  },
+  {
+    id: 'jisHeatAbsorbingR3208',
+    label: 'JIS R 3208 熱線吸収板ガラス（約8dB）',
+    lossDb: 8,
+    description: '日射熱を吸収する着色/吸収系ガラスです。通常ガラスよりやや大きめに見込む初期値です。',
+  },
+  {
+    id: 'jisInsulatingR3209',
+    label: 'JIS R 3209 複層ガラス（約10dB）',
+    lossDb: 10,
+    description: '2枚以上の板ガラスと密封中空層を持つ構成です。既存の複層ガラス相当の目安です。',
+  },
+  {
+    id: 'jisLowEInsulatingR3209',
+    label: 'JIS R 3209 Low-E複層想定（約40dB）',
+    lossDb: 40,
+    description: '複層ガラスにLow-E膜を含む想定です。膜仕様で変動が大きいため実測校正を推奨します。',
+  },
+  {
+    id: 'jisSolarReflectiveR3221',
+    label: 'JIS R 3221 熱線反射ガラス（約30dB）',
+    lossDb: 30,
+    description: '日射熱遮蔽用の薄膜を持つガラスです。金属膜入り相当として大きめの損失を置きます。',
+  },
+  {
+    id: 'custom',
+    label: '任意',
+    lossDb: null,
+    description: '現地の窓開放/窓閉鎖の実測差、またはメーカー資料に合わせて手入力します。',
+  },
 ]
 
 const NAMIGATE_PRESETS: {
@@ -1540,12 +1635,12 @@ const HELP_TEXT: Record<string, string> = {
   '屋外距離': '送信機から窓面までの水平距離です。展示会デモでは100mなどの仮値で十分ですが、実証では図面、地図、レーザー距離計で確認した値を入れます。送信アンテナ高と窓中心高を加味して屋外3D斜距離へ変換します。',
   '屋外遮蔽損失': '屋外側の樹木、車両、仮設物、見通し悪化などを追加損失として見込む値です。',
   '地面反射補正': '地面反射などで強め/弱めに見込む補正値です。まず0dBから始めます。',
-  '窓種別': '代表的な窓損失をプリセットから選べます。建物侵入損失の標準モデルでは、従来型建物と熱効率の高い建物を分けて扱うため、Low-Eや金属膜入りは別カテゴリとして見ます。',
-  '窓損失': '窓ガラスを通過するときに失われる量です。通常ガラスは数dB、複層は10dB級、Low-Eや金属膜入りは30-40dB級を初期仮説にし、窓開放/窓閉鎖の実測差で校正します。',
+  '窓種別': '代表的な窓損失をプリセットから選べます。JIS R 3202/R 3204/R 3205/R 3206/R 3208/R 3209/R 3221の分類を参考にした候補もありますが、JIS自体はローカル5GのRF減衰を規定しません。',
+  '窓損失': '窓ガラスを通過するときに失われる量です。通常ガラスは数dB、複層は10dB級、網入・熱線反射・Low-Eなど金属要素を含む窓は大きめの初期仮説にし、窓開放/窓閉鎖の実測差で校正します。',
   '窓幅': '窓の横幅です。図示とヒートマップの窓表示に使います。',
   '窓高さ': '窓の高さです。3D図の窓サイズに使います。',
   '窓中心高': '窓またはナミゲート中心の地上高です。送信・受信アンテナ高との差から3D距離と入射の説明を合わせます。',
-  '入射角': '電波が窓へ入る角度です。90度が正面入射で、60度は軽微、45度以下は悪化が目立つ仮定から始めます。実測では基地局方位、窓面方位、偏波をそろえて記録します。',
+  '入射角': '電波の進行方向が窓面となす角度です。90度が正面入射、60度は法線から30度ずれ、45度以下は悪化が目立つ仮定から始めます。実測では基地局方位、窓面方位、偏波をそろえて記録します。',
   '部屋幅': '窓に沿った横方向の部屋寸法です。接続可能面積の計算に使います。',
   '部屋奥行': '窓から室内奥方向の部屋寸法です。ヒートマップ範囲と到達距離評価に使います。',
   '室内距離': '窓から受信点までの水平距離です。商談では代表点、実証では窓際・中央・奥側の複数点を測ると到達距離を説明しやすくなります。受信アンテナ高と窓中心高を加味して室内3D距離へ変換します。',
@@ -2113,7 +2208,7 @@ function calculateIndoorLossDb(distanceM: number, exponent: number) {
 }
 
 function calculateAngleLossDb(angleDeg: number) {
-  const safeAngle = clamp(angleDeg, 15, 90)
+  const safeAngle = getSafeIncidentAngleDeg(angleDeg)
 
   for (let index = 0; index < ANGLE_LOSS_POINTS.length - 1; index += 1) {
     const lower = ANGLE_LOSS_POINTS[index]
@@ -2127,6 +2222,40 @@ function calculateAngleLossDb(angleDeg: number) {
   }
 
   return safeAngle >= 90 ? 0 : 10
+}
+
+function getSafeIncidentAngleDeg(angleDeg: number) {
+  return clamp(angleDeg, 15, 90)
+}
+
+function getNormalOffsetAngleDeg(angleDeg: number) {
+  return 90 - getSafeIncidentAngleDeg(angleDeg)
+}
+
+function formatIncidentAngleReference(angleDeg: number) {
+  const safeAngle = getSafeIncidentAngleDeg(angleDeg)
+  return `窓面基準 入射角 ${numberFormatter.format(
+    safeAngle,
+  )}° / 法線ずれ ${numberFormatter.format(getNormalOffsetAngleDeg(angleDeg))}°`
+}
+
+function getIncidentRayLocalPoint(angleDeg: number, normalDistanceM: number) {
+  const normalOffsetRad = (getNormalOffsetAngleDeg(angleDeg) * Math.PI) / 180
+
+  return {
+    uM: -Math.tan(normalOffsetRad) * normalDistanceM,
+    vM: -normalDistanceM,
+  }
+}
+
+function getIncidentRayLocalUnit(angleDeg: number) {
+  const point = getIncidentRayLocalPoint(angleDeg, 1)
+  const length = Math.max(Math.hypot(point.uM, point.vM), 0.0001)
+
+  return {
+    uM: point.uM / length,
+    vM: point.vM / length,
+  }
 }
 
 function calculateRawAreaGainDb(
@@ -3680,7 +3809,7 @@ function buildPrintReportHtml({
             <tr><th>窓種別</th><td>${escapeHtml(windowLabel)}</td><th>実効窓損失</th><td>${escapeHtml(formatDb(effectiveWindowLossDb))}</td></tr>
             <tr><th>間取り</th><td>${escapeHtml(getRoomLayoutSummary(settings))}</td><th>窓サイズ</th><td>${escapeHtml(getWindowSizeSummary(settings))}</td></tr>
             <tr><th>建物材質</th><td>${escapeHtml(getBuildingMaterialSummary(settings))}</td><th>建材補正</th><td>${escapeHtml(formatDb(settings.buildingMaterialLossDb))}</td></tr>
-            <tr><th>入射角</th><td>${escapeHtml(`${numberFormatter.format(settings.incidentAngleDeg)}° / 損失 ${formatDb(angleLossDb)}`)}</td><th>ナミゲート</th><td>${escapeHtml(`${namigateLabel} / 仮説 ${formatDb(totalNamigateGainDb)} / 適用 ${formatDb(appliedNamigateGainDb)}`)}</td></tr>
+            <tr><th>入射角</th><td>${escapeHtml(`${formatIncidentAngleReference(settings.incidentAngleDeg)} / 損失 ${formatDb(angleLossDb)}`)}</td><th>ナミゲート</th><td>${escapeHtml(`${namigateLabel} / 仮説 ${formatDb(totalNamigateGainDb)} / 適用 ${formatDb(appliedNamigateGainDb)}`)}</td></tr>
             <tr><th>EIRP</th><td>${escapeHtml(formatDbm(effectiveEirpDbm))}</td><th>詳細EIRP</th><td>${escapeHtml(formatDbm(detailedEirpDbm))}</td></tr>
             <tr><th>送信/受信高</th><td>${escapeHtml(`${formatMeters(settings.txAntennaHeightM)} / ${formatMeters(settings.rxAntennaHeightM)}`)}</td><th>窓中心高</th><td>${escapeHtml(formatMeters(settings.windowCenterHeightM))}</td></tr>
             <tr><th>伝搬損失</th><td>${escapeHtml(`屋外 ${formatDb(currentOutdoorPathLossDb)} / 室内 ${formatDb(currentIndoorLossDb)}`)}</td><th>受信系補正</th><td>${escapeHtml(formatDb(receiverAdjustmentDb))}</td></tr>
@@ -3888,6 +4017,110 @@ function FieldAidPanel({ items }: { items: FieldAidItem[] }) {
             <strong>{item.value}</strong>
             <small>{item.memo}</small>
           </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function InputSnapshotPanel({
+  settings,
+  protocol,
+  activeInputStep,
+  appMode,
+  onStepSelect,
+}: {
+  settings: Settings
+  protocol: TestProtocol
+  activeInputStep: InputStepId
+  appMode: AppMode
+  onStepSelect: (stepId: InputStepId) => void
+}) {
+  const windowLabel =
+    WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId)?.label ??
+    '任意'
+  const items: {
+    label: string
+    value: string
+    memo: string
+    stepId: InputStepId
+  }[] = [
+    {
+      label: '無線',
+      value: `${numberFormatter.format(settings.frequencyMHz)}MHz / ${formatDbm(
+        settings.eirpMode === 'direct'
+          ? settings.eirpDbm
+          : calculateDetailedEirpDbm(settings),
+      )}`,
+      memo: `屋外 ${formatMeters(settings.outdoorDistanceM)}`,
+      stepId: 'radio',
+    },
+    {
+      label: '窓',
+      value: `${windowLabel} / ${formatDb(getEffectiveWindowLossDb(settings))}`,
+      memo: `窓面基準 ${numberFormatter.format(
+        getSafeIncidentAngleDeg(settings.incidentAngleDeg),
+      )}° / 法線ずれ ${numberFormatter.format(
+        getNormalOffsetAngleDeg(settings.incidentAngleDeg),
+      )}°`,
+      stepId: 'windowRoom',
+    },
+    {
+      label: '室内',
+      value: `${numberFormatter.format(settings.roomWidthM)}×${numberFormatter.format(
+        settings.roomDepthM,
+      )}m`,
+      memo: `受信点 ${formatMeters(settings.indoorDistanceM)} / 高さ ${formatMeters(
+        settings.rxAntennaHeightM,
+      )}`,
+      stepId: 'windowRoom',
+    },
+    {
+      label: 'ナミゲート',
+      value:
+        settings.namigateGainDb > 0
+          ? `${formatDb(calculateAppliedNamigateGainDb(settings))} 適用`
+          : 'なし',
+      memo: `${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(
+        settings.namigateHeightCm,
+      )}cm`,
+      stepId: 'namigate',
+    },
+    {
+      label: '実測',
+      value: `目標N=${numberFormatter.format(protocol.observationCount)}`,
+      memo: `平均 ${numberFormatter.format(protocol.averagingSeconds)}秒 / 高さ ${formatMeters(
+        protocol.measurementHeightM,
+      )}`,
+      stepId: 'measurement',
+    },
+  ]
+
+  return (
+    <section className="input-snapshot-panel" aria-label="現在の主要入力条件">
+      <div className="snapshot-heading">
+        <strong>現在の主要条件</strong>
+        <span>
+          {appMode === 'technical'
+            ? 'クリックで該当入力へ移動'
+            : 'プリセット反映後の確認'}
+        </span>
+      </div>
+      <div className="snapshot-grid">
+        {items.map((item) => (
+          <button
+            className={`${activeInputStep === item.stepId ? 'is-active' : ''} ${
+              appMode === 'sales' ? 'is-static' : ''
+            }`}
+            key={item.label}
+            disabled={appMode === 'sales'}
+            type="button"
+            onClick={() => onStepSelect(item.stepId)}
+          >
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.memo}</small>
+          </button>
         ))}
       </div>
     </section>
@@ -4321,7 +4554,7 @@ function buildExperimentReport({
 	    `- 屋外遮蔽損失: ${formatDb(settings.outdoorObstructionLossDb)}`,
 	    `- 屋内遮蔽損失: ${formatDb(settings.indoorObstacleLossDb)}`,
 	    `- 実効窓損失: ${formatDb(getEffectiveWindowLossDb(settings))}`,
-	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)}°`,
+	    `- 入射角: ${formatIncidentAngleReference(settings.incidentAngleDeg)}`,
 	    `- 屋内伝搬指数: ${numberFormatter.format(settings.indoorPathLossExponent)}`,
 	    `- ナミゲート改善仮説: ${formatDb(calculateNamigateTotalGainDb(settings))}`,
 	    `- ナミゲート適用改善量: ${formatDb(calculateAppliedNamigateGainDb(settings))}`,
@@ -4533,7 +4766,7 @@ function buildAiAnalysisText({
 	    `- 窓サイズ: ${getWindowSizeSummary(settings)}`,
 	    `- 間取り: ${getRoomLayoutSummary(settings)}`,
 	    `- 建物材質: ${getBuildingMaterialSummary(settings)}`,
-	    `- 入射角: ${numberFormatter.format(settings.incidentAngleDeg)} deg`,
+	    `- 入射角: ${formatIncidentAngleReference(settings.incidentAngleDeg)}`,
 	    `- 入射角損失: ${formatDb(angleLossDb)}`,
 	    `- 部屋サイズ: ${numberFormatter.format(settings.roomWidthM)} x ${numberFormatter.format(
 	      settings.roomDepthM,
@@ -4609,6 +4842,7 @@ function NumberInput({
   step = 1,
   unit,
   help,
+  hint,
 }: NumberInputProps) {
   const [inputState, setInputState] = useState({
     draftValue: formatNumberInputValue(value),
@@ -4634,13 +4868,40 @@ function NumberInput({
       isEditing: false,
     })
   }
+  const rangeText =
+    min !== undefined && max !== undefined
+      ? `目安範囲 ${numberFormatter.format(min)} - ${numberFormatter.format(max)}${
+          unit ? ` ${unit}` : ''
+        }`
+      : null
+  const stepValue = Number.isFinite(step) && step > 0 ? step : 1
+  const updateByStep = (direction: -1 | 1) => {
+    const rawNextValue = value + direction * stepValue
+    const nextValue = clamp(
+      rawNextValue,
+      min ?? Number.NEGATIVE_INFINITY,
+      max ?? Number.POSITIVE_INFINITY,
+    )
+
+    onChange(Number(nextValue.toFixed(6)))
+  }
 
   return (
-    <label className="control">
+    <div className="control">
       <TermLabel label={label} help={help ?? HELP_TEXT[label]} />
-      <div className="input-row">
+      <div className="input-row number-input-row">
+        <button
+          aria-label={`${label}を${numberFormatter.format(stepValue)}${unit ?? ''}下げる`}
+          className="input-stepper"
+          disabled={min !== undefined && value <= min}
+          type="button"
+          onClick={() => updateByStep(-1)}
+        >
+          -
+        </button>
         <input
           type="number"
+          aria-label={label}
           inputMode="decimal"
           value={displayValue}
           min={min}
@@ -4682,9 +4943,21 @@ function NumberInput({
             }
           }}
         />
+        <button
+          aria-label={`${label}を${numberFormatter.format(stepValue)}${unit ?? ''}上げる`}
+          className="input-stepper"
+          disabled={max !== undefined && value >= max}
+          type="button"
+          onClick={() => updateByStep(1)}
+        >
+          +
+        </button>
         {unit ? <small>{unit}</small> : null}
       </div>
-    </label>
+      {hint || rangeText ? (
+        <small className="control-note">{hint ?? rangeText}</small>
+      ) : null}
+    </div>
   )
 }
 
@@ -4801,18 +5074,17 @@ function PositionScene3D({
 	      roomWidthM / 2 - 0.35,
 	    )
 	    const receiverZ = clamp(receiverPlanPosition.yM, 0.7, roomDepthM - 0.45)
-	    const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+	    const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
 	    const outdoorDisplayM = clamp(Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.6, 3, 9)
-	    const lateralOffsetM =
-	      Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM
+	    const incidentRayLocal = getIncidentRayLocalPoint(safeAngle, outdoorDisplayM)
 	    const transmitterPlanX =
 	      windowPlanPosition.xM +
-	      faceGeometry.outwardNormal.xM * outdoorDisplayM -
-	      faceGeometry.tangent.xM * lateralOffsetM
+	      faceGeometry.tangent.xM * incidentRayLocal.uM +
+	      faceGeometry.inwardNormal.xM * incidentRayLocal.vM
 	    const transmitterPlanY =
 	      windowPlanPosition.yM +
-	      faceGeometry.outwardNormal.yM * outdoorDisplayM -
-	      faceGeometry.tangent.yM * lateralOffsetM
+	      faceGeometry.tangent.yM * incidentRayLocal.uM +
+	      faceGeometry.inwardNormal.yM * incidentRayLocal.vM
     const transmitterX = clamp(
       transmitterPlanX - roomWidthM / 2,
       -roomWidthM / 2 - 5,
@@ -5302,7 +5574,7 @@ function PositionScene3D({
         target: outdoorMidPoint,
       },
       {
-        label: makeLabel(`入射角 ${numberFormatter.format(safeAngle)}°`, '#c96c34'),
+        label: makeLabel(`窓面入射 ${numberFormatter.format(safeAngle)}°`, '#c96c34'),
         position: new THREE.Vector3(
           windowPlanX - windowWidthM / 2 - 1.05,
           windowCenterY + 1.08,
@@ -5485,8 +5757,16 @@ function PositionScene3D({
           </div>
           <div>
             <span>入射角</span>
-            <strong>{numberFormatter.format(settings.incidentAngleDeg)}°</strong>
-            <small>角度損失 {formatDb(angleLossDb)}</small>
+            <strong>
+              窓面基準 {numberFormatter.format(
+                getSafeIncidentAngleDeg(settings.incidentAngleDeg),
+              )}°
+            </strong>
+            <small>
+              法線ずれ {numberFormatter.format(
+                getNormalOffsetAngleDeg(settings.incidentAngleDeg),
+              )}° / 角度損失 {formatDb(angleLossDb)}
+            </small>
           </div>
           <div>
             <span>窓・ナミゲート</span>
@@ -5574,18 +5854,14 @@ function DiagonalWindowAngleGuide({
   } = getRoomLayoutMetrics(settings)
   const face = getWindowFaceGeometryM(settings)
   const receiver = getReceiverPlanPositionM(settings)
-  const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+  const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
+  const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
   const outdoorDisplayM = clamp(
     Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.1,
     2.4,
     6.8,
   )
-  const lateralOffsetM =
-    Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM
-  const transmitterLocal = {
-    uM: -lateralOffsetM,
-    vM: -outdoorDisplayM,
-  }
+  const transmitterLocal = getIncidentRayLocalPoint(safeAngle, outdoorDisplayM)
   const receiverLocal = toWindowLocalPoint(settings, receiver)
   const roomOutlineLocal = [
     { xM: notchWidthM, yM: 0 },
@@ -5615,10 +5891,16 @@ function DiagonalWindowAngleGuide({
   const maxU = Math.max(...fitPoints.map((point) => point.uM)) + 0.4
   const minV = Math.min(...fitPoints.map((point) => point.vM)) - 0.35
   const maxV = Math.max(...fitPoints.map((point) => point.vM)) + 0.55
+  const scale = Math.min(
+    84 / Math.max(maxU - minU, 0.1),
+    76 / Math.max(maxV - minV, 0.1),
+  )
+  const centerU = (minU + maxU) / 2
+  const centerV = (minV + maxV) / 2
   const mapX = (uM: number) =>
-    8 + ((uM - minU) / Math.max(maxU - minU, 0.1)) * 84
+    50 + (uM - centerU) * scale
   const mapY = (vM: number) =>
-    12 + ((vM - minV) / Math.max(maxV - minV, 0.1)) * 76
+    50 + (vM - centerV) * scale
   const pointString = roomOutlineLocal
     .map((point) => `${mapX(point.uM)},${mapY(point.vM)}`)
     .join(' ')
@@ -5632,14 +5914,31 @@ function DiagonalWindowAngleGuide({
   const receiverY = mapY(receiverLocal.vM)
   const leftWallStart = leftWallLocal[0]
   const leftWallEnd = leftWallLocal[1]
-  const labelX = clamp((transmitterX + 50) / 2, 20, 68)
-  const labelY = clamp((transmitterY + windowY) / 2 - 2, 18, 58)
+  const incidentUnit = getIncidentRayLocalUnit(safeAngle)
+  const arcRadiusM = Math.min(normalLengthM * 0.44, outdoorDisplayM * 0.25, 1.05)
+  const arcStart = { uM: 0, vM: -arcRadiusM }
+  const arcEnd = {
+    uM: incidentUnit.uM * arcRadiusM,
+    vM: incidentUnit.vM * arcRadiusM,
+  }
+  const arcRadiusPx = arcRadiusM * scale
+  const normalOffsetRad = (normalOffsetDeg * Math.PI) / 180
+  const angleLabelPoint = {
+    uM: -Math.sin(normalOffsetRad / 2) * (arcRadiusM + 0.48),
+    vM: -Math.cos(normalOffsetRad / 2) * (arcRadiusM + 0.48),
+  }
+  const angleArcPath =
+    normalOffsetDeg < 0.5
+      ? ''
+      : `M ${mapX(arcStart.uM)} ${mapY(arcStart.vM)} A ${arcRadiusPx} ${arcRadiusPx} 0 0 0 ${mapX(
+          arcEnd.uM,
+        )} ${mapY(arcEnd.vM)}`
 
   return (
     <div className="diagonal-angle-guide" aria-label="斜め窓の入射角補助図">
       <div className="subsection-heading">
         <h3>斜め窓の入射角</h3>
-        <span>窓面を水平に置き直した見方</span>
+        <span>90°が正面入射、法線ずれも併記</span>
       </div>
       <svg viewBox="0 0 100 100" role="img" aria-label="斜め窓を水平化した入射角の図">
         <defs>
@@ -5710,8 +6009,16 @@ function DiagonalWindowAngleGuide({
         />
         <path
           className="diagonal-guide-angle-arc"
-          d={`M 50 ${windowY - 14} Q ${labelX} ${labelY} ${transmitterX} ${transmitterY + 7}`}
+          d={angleArcPath}
         />
+        <text
+          className="diagonal-guide-accent diagonal-guide-angle-label"
+          textAnchor="middle"
+          x={mapX(angleLabelPoint.uM)}
+          y={mapY(angleLabelPoint.vM) - 1.5}
+        >
+          法線ずれ {numberFormatter.format(normalOffsetDeg)}°
+        </text>
         <line
           className="diagonal-guide-indoor-ray"
           x1="50"
@@ -5728,7 +6035,10 @@ function DiagonalWindowAngleGuide({
           斜め窓面（水平化）
         </text>
         <text className="diagonal-guide-accent" textAnchor="middle" x="50" y={windowY + 8.7}>
-          法線基準 入射角 {numberFormatter.format(safeAngle)}°
+          窓面基準 入射角 {numberFormatter.format(safeAngle)}°
+        </text>
+        <text className="diagonal-guide-muted" textAnchor="middle" x="53.8" y={(normalTopY + windowY) / 2}>
+          法線
         </text>
         <text
           className="diagonal-guide-label"
@@ -5771,7 +6081,8 @@ function HeatmapPlan({
   const receiverPosition = getReceiverPlanPositionM(settings)
   const windowXPct = clamp((windowPosition.xM / roomWidthM) * 100, 6, 94)
   const windowYPct = clamp((windowPosition.yM / roomDepthM) * 100, 0, 92)
-  const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+  const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
+  const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
   const transmitterXPct = clamp(
     windowXPct +
       faceGeometry.outwardNormal.xM * 26 -
@@ -5840,12 +6151,19 @@ function HeatmapPlan({
             x={(transmitterXPct + windowXPct) / 2}
             y="38"
           >
-            入射角 {numberFormatter.format(safeAngle)}°
+            窓面入射 {numberFormatter.format(safeAngle)}°
           </text>
         </svg>
         <span className="heatmap-outdoor-distance">
-          屋外3D {formatMeters(calculateOutdoorLinkDistanceM(settings))}
+          屋外3D {formatMeters(calculateOutdoorLinkDistanceM(settings))} / 法線ずれ{' '}
+          {numberFormatter.format(normalOffsetDeg)}°
         </span>
+      </div>
+
+      <div className="heatmap-route-strip" aria-label="図の読み順">
+        <span>送信機</span>
+        <strong>窓面</strong>
+        <span>受信機</span>
       </div>
 
       <div
@@ -6110,7 +6428,8 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
   const heightToDiagramY = (heightM: number) =>
     roomY + roomHeight - (clamp(heightM, 0, verticalMaxM) / verticalMaxM) * roomHeight
   const windowCenterY = heightToDiagramY(settings.windowCenterHeightM)
-  const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
+  const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
+  const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
   const transmitterX = 70
   const transmitterY = heightToDiagramY(settings.txAntennaHeightM)
   const receiverX =
@@ -6297,7 +6616,11 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           室内3D {formatMeters(calculateIndoorLinkDistanceM(settings))}
         </text>
         <text className="diagram-muted-label" x={windowX - 95} y={windowCenterY - 18}>
-          入射角 {numberFormatter.format(safeAngle)}° / 損失 {formatDb(angleLossDb)}
+          窓面基準 {numberFormatter.format(safeAngle)}° / 法線ずれ{' '}
+          {numberFormatter.format(normalOffsetDeg)}°
+        </text>
+        <text className="diagram-muted-label" x={windowX - 95} y={windowCenterY - 3}>
+          入射角損失 {formatDb(angleLossDb)}
         </text>
       </svg>
 
@@ -7155,6 +7478,12 @@ function App() {
       SALES_PRESETS[0],
     [salesPresetId],
   )
+  const selectedWindowPreset = useMemo(
+    () =>
+      WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId) ??
+      WINDOW_PRESETS[0],
+    [settings.windowPresetId],
+  )
 
   const salesComment = useMemo(
     () =>
@@ -7683,6 +8012,14 @@ function App() {
             <span>このブラウザに作業中の入力内容を自動保存します</span>
           </section>
 
+          <InputSnapshotPanel
+            activeInputStep={activeInputStep}
+            appMode={appMode}
+            protocol={protocol}
+            settings={settings}
+            onStepSelect={setActiveInputStep}
+          />
+
           <section className="sales-control-panel" aria-label="営業用簡易入力">
             <div className="sales-mode-note">
               <strong>プリセットから始めて、必要な数値だけ調整</strong>
@@ -7691,6 +8028,11 @@ function App() {
               </span>
             </div>
             <div className="sales-control-grid">
+              <div className="sales-section-title">
+                <span>1</span>
+                <strong>プリセットを選ぶ</strong>
+                <small>近い条件から始める</small>
+              </div>
               <label className="control sales-preset-control">
                 <TermLabel
                   label="営業用プリセット"
@@ -7710,6 +8052,11 @@ function App() {
                 </select>
                 <small>{selectedSalesPreset.description}</small>
               </label>
+              <div className="sales-section-title">
+                <span>2</span>
+                <strong>建物・間取りを合わせる</strong>
+                <small>部屋形状と窓サイズの前提</small>
+              </div>
               <label className="control">
                 <TermLabel
                   label="間取りプリセット"
@@ -7770,12 +8117,18 @@ function App() {
                   ))}
                 </select>
               </label>
+              <div className="sales-section-title">
+                <span>3</span>
+                <strong>屋外から窓までを入れる</strong>
+                <small>周波数と基地局距離</small>
+              </div>
               <NumberInput
                 label="周波数"
                 value={settings.frequencyMHz}
                 min={1}
                 step={10}
                 unit="MHz"
+                hint="Sub6の実証は4.6-4.9GHz帯なら4700MHz前後から開始します。"
                 onChange={(value) => updateSetting('frequencyMHz', value)}
               />
               <NumberInput
@@ -7785,8 +8138,14 @@ function App() {
                 step={1}
                 unit="m"
                 help="屋外基地局・送信アンテナから窓面までの水平距離です。展示会デモでは100m、実地検討では図面または地図で確認した距離を入れます。"
+                hint="地図距離は窓中心まで、実測時は送信アンテナ位置からの水平距離で揃えます。"
                 onChange={(value) => updateSetting('outdoorDistanceM', value)}
               />
+              <div className="sales-section-title">
+                <span>4</span>
+                <strong>窓と受信点を調整</strong>
+                <small>損失、角度、室内距離</small>
+              </div>
               <label className="control">
                 <TermLabel label="窓種別" help={HELP_TEXT['窓種別']} />
                 <select
@@ -7801,6 +8160,7 @@ function App() {
                     </option>
                   ))}
                 </select>
+                <small className="control-note">{selectedWindowPreset.description}</small>
               </label>
               <NumberInput
                 label="窓損失"
@@ -7808,6 +8168,7 @@ function App() {
                 min={0}
                 step={1}
                 unit="dB"
+                hint="プリセットで仮置きし、窓開放と窓閉鎖の実測差で上書きします。"
                 onChange={(value) => {
                   updateSetting('windowPresetId', 'custom')
                   updateSetting('windowLossDb', value)
@@ -7820,6 +8181,7 @@ function App() {
                 max={90}
                 step={1}
                 unit="°"
+                hint="90°が正面入射です。斜め窓では、水平化した窓面となす角度で入力します。"
                 onChange={(value) => updateSetting('incidentAngleDeg', value)}
               />
               <NumberInput
@@ -7828,8 +8190,14 @@ function App() {
                 min={1}
                 step={0.5}
                 unit="m"
+                hint="窓面から受信点まで。窓際、中央、奥側を分けると考察しやすくなります。"
                 onChange={(value) => updateSetting('indoorDistanceM', value)}
               />
+              <div className="sales-section-title">
+                <span>5</span>
+                <strong>ナミゲート条件</strong>
+                <small>有無と改善量</small>
+              </div>
               <label className="checklist-item sales-toggle">
                 <input
                   checked={settings.namigateGainDb > 0}
@@ -7873,6 +8241,7 @@ function App() {
                 min={0}
                 step={1}
                 unit="dB"
+                hint="まず3/10/25dBの仮説で比較し、実測後に校正します。"
                 onChange={(value) => {
                   updateSetting('namigatePresetId', 'custom')
                   updateSetting('namigateGainDb', value)
@@ -7884,6 +8253,7 @@ function App() {
                 min={0.2}
                 step={0.1}
                 unit="m"
+                hint="三脚や机上など、3状態で同じ高さに固定します。"
                 onChange={(value) => {
                   updateProtocol('measurementHeightM', value)
                   updateSetting('rxAntennaHeightM', value)
@@ -8305,6 +8675,7 @@ function App() {
                   </option>
                 ))}
               </select>
+              <small className="control-note">{selectedWindowPreset.description}</small>
             </label>
             <NumberInput
               label="窓損失"
@@ -9659,6 +10030,13 @@ function App() {
                 <HelpTip text="屋外距離、窓サイズ、ナミゲートサイズ、室内距離、実測点を同じ座標感で確認できます。" />
               </span>
             </div>
+            <div className="diagram-legend-strip" aria-label="3D図の読み方">
+              <span><i className="legend-dot is-tx" />送信機</span>
+              <span><i className="legend-line is-ray" />電波経路</span>
+              <span><i className="legend-window" />窓面</span>
+              <span><i className="legend-window is-namigate" />ナミゲート</span>
+              <span>角度は窓面基準、90°が正面入射</span>
+            </div>
             <PositionScene3D
               settings={settings}
               angleLossDb={angleLossDb}
@@ -9702,6 +10080,13 @@ function App() {
                 RSRP / しきい値 {formatDbm(settings.connectionThresholdDbm)}
                 <HelpTip text="色が明るいほど受信が強く、実測点を取り込むと推定とのズレを重ねて確認できます。" />
               </span>
+            </div>
+            <div className="diagram-legend-strip heatmap-scale-strip" aria-label="ヒートマップの読み方">
+              <span><i className="heat-scale is-strong" />良好</span>
+              <span><i className="heat-scale is-ok" />接続目安</span>
+              <span><i className="heat-scale is-warn" />要確認</span>
+              <span><i className="heat-scale is-low" />しきい値未満</span>
+              <span><i className="legend-line is-indoor" />窓から受信点までの室内距離</span>
             </div>
             <div className="heatmap-grid">
               {SCENARIOS.map((scenario) => (

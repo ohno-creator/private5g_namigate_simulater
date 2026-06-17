@@ -206,6 +206,12 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   await expect(page.getByLabel('営業用簡易入力')).toContainText(
     'DL 4x4MIMO/256QAM',
   )
+  await page.getByRole('button', { name: '周波数を10MHz上げる' }).click()
+  await expect(controlInput(page, '周波数')).toHaveValue('4710')
+  await expect(presetSelect).toHaveValue('custom')
+
+  await presetSelect.selectOption('fieldTestRu100MhzTdd')
+  await expect(controlInput(page, '周波数')).toHaveValue('4700')
   await expect(controlSelect(page, '間取りプリセット')).toHaveValue('rectangle')
   await expect(controlSelect(page, '窓サイズプリセット')).toHaveValue('standard')
   await expect(controlSelect(page, '建物材質')).toHaveValue('reinforcedConcrete')
@@ -274,6 +280,9 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   )
   await expect(page.getByLabel('斜め窓の入射角補助図')).toHaveCount(3)
   await expect(page.getByText('斜め窓面（水平化）').first()).toBeVisible()
+  await expect(page.getByText('窓面基準 入射角 45°').first()).toBeVisible()
+  await expect(page.getByText('法線ずれ 45°').first()).toBeVisible()
+  await expect(page.getByText('法線基準')).toHaveCount(0)
   await expect(page.locator('.heatmap-left-wall-line')).toHaveCount(3)
   await expect(page.locator('.heatmap-notch').first()).toBeVisible()
   await expect(page.locator('.position-3d-facts')).toContainText('斜め角欠け')
@@ -317,6 +326,16 @@ test('入力変更でプリセット値と可視化ラベルが更新される',
   await switchToTechnicalMode(page)
 
   await openInputStep(page, '窓・室内')
+  const activeInputPanel = page.locator('.control-group.input-step-panel.is-active')
+
+  await controlSelect(page, '窓種別').selectOption('jisInsulatingR3209')
+  await expect(controlInput(page, '窓損失')).toHaveValue('10')
+  await expect(activeInputPanel.getByText('2枚以上の板ガラスと密封中空層')).toBeVisible()
+
+  await controlSelect(page, '窓種別').selectOption('jisSolarReflectiveR3221')
+  await expect(controlInput(page, '窓損失')).toHaveValue('30')
+  await expect(activeInputPanel.getByText('日射熱遮蔽用の薄膜')).toBeVisible()
+
   await controlSelect(page, '窓種別').selectOption('single')
   await expect(controlInput(page, '窓損失')).toHaveValue('3')
   await expect(metricCard(page, '窓損失')).toContainText('3 dB')
@@ -340,6 +359,70 @@ test('入力変更でプリセット値と可視化ラベルが更新される',
   expect(afterDistanceChange[0]).toBeLessThan(beforeDistanceChange[0])
   expect(afterDistanceChange[1]).toBeLessThan(beforeDistanceChange[1])
   expect(afterDistanceChange[2]).toBeLessThan(beforeDistanceChange[2])
+})
+
+test('シミュレーション結果が角度・窓・距離・改善量の組み合わせで一貫する', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await switchToTechnicalMode(page)
+
+  await openInputStep(page, '窓・室内')
+  await controlSelect(page, '窓種別').selectOption('single')
+  await controlInput(page, '室内距離').fill('8')
+  await controlInput(page, '入射角').fill('90')
+  const angle90 = await rsrpValues(page)
+
+  await controlInput(page, '入射角').fill('60')
+  const angle60 = await rsrpValues(page)
+  expect(angle60[0]).toBeCloseTo(angle90[0], 1)
+  expect(angle60[1]).toBeCloseTo(angle90[1] - 1, 1)
+
+  await controlInput(page, '入射角').fill('45')
+  const angle45 = await rsrpValues(page)
+  expect(angle45[1]).toBeCloseTo(angle90[1] - 3, 1)
+
+  await controlInput(page, '入射角').fill('30')
+  const angle30 = await rsrpValues(page)
+  expect(angle30[1]).toBeCloseTo(angle90[1] - 6, 1)
+
+  await controlInput(page, '入射角').fill('15')
+  const angle15 = await rsrpValues(page)
+  expect(angle15[1]).toBeCloseTo(angle90[1] - 10, 1)
+  expect(angle15[2]).toBeGreaterThanOrEqual(angle15[1])
+  expect(angle15[2]).toBeLessThanOrEqual(angle15[0] + 0.1)
+
+  await controlSelect(page, '窓種別').selectOption('none')
+  const noWindowPreset = await rsrpValues(page)
+  expect(noWindowPreset[1]).toBeCloseTo(noWindowPreset[0], 1)
+  expect(noWindowPreset[2]).toBeCloseTo(noWindowPreset[0], 1)
+
+  await controlInput(page, '入射角').fill('45')
+  await controlSelect(page, '窓種別').selectOption('single')
+  const singleGlass = await rsrpValues(page)
+  await controlSelect(page, '窓種別').selectOption('lowE')
+  const lowEGlass = await rsrpValues(page)
+  expect(lowEGlass[0]).toBeCloseTo(singleGlass[0], 1)
+  expect(lowEGlass[1]).toBeCloseTo(singleGlass[1] - 37, 1)
+
+  await controlSelect(page, '窓種別').selectOption('single')
+  await controlInput(page, '入射角').fill('90')
+  await controlInput(page, '室内距離').fill('3')
+  const nearPoint = await rsrpValues(page)
+  await controlInput(page, '室内距離').fill('12')
+  const farPoint = await rsrpValues(page)
+  expect(farPoint[0]).toBeLessThan(nearPoint[0])
+  expect(farPoint[1]).toBeLessThan(nearPoint[1])
+
+  await controlSelect(page, '窓種別').selectOption('lowE')
+  await controlInput(page, '入射角').fill('45')
+  await openInputStep(page, 'ナミゲート')
+  await controlInput(page, 'ナミゲート改善量').fill('0')
+  const noNamigateGain = await rsrpValues(page)
+  await controlInput(page, 'ナミゲート改善量').fill('10')
+  const withNamigateGain = await rsrpValues(page)
+  expect(withNamigateGain[2]).toBeGreaterThan(noNamigateGain[2])
+  expect(withNamigateGain[2]).toBeLessThanOrEqual(withNamigateGain[0] + 0.1)
 })
 
 test('数値パラメータをキーボードで直接入力できる', async ({ page }) => {

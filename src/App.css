@@ -371,6 +371,106 @@
   line-height: 1.45;
 }
 
+.input-snapshot-panel {
+  display: grid;
+  gap: 10px;
+  margin: 10px 14px 0;
+  padding: 12px;
+  border: 1px solid #cfe0eb;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.snapshot-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.snapshot-heading strong {
+  color: #15364f;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.snapshot-heading span {
+  color: #657380;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.snapshot-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.snapshot-grid button {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  padding: 10px;
+  border: 1px solid #d3e0e9;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #253544;
+  font: inherit;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.snapshot-grid button:hover,
+.snapshot-grid button:focus {
+  border-color: #0071bd;
+  outline: 3px solid rgba(0, 113, 189, 0.14);
+}
+
+.snapshot-grid button.is-active {
+  border-color: #0071bd;
+  background: #eef8fd;
+}
+
+.snapshot-grid button.is-static {
+  cursor: default;
+}
+
+.snapshot-grid button.is-static:hover,
+.snapshot-grid button.is-static:focus {
+  border-color: #d3e0e9;
+  outline: none;
+}
+
+.snapshot-grid button:disabled {
+  color: #253544;
+  opacity: 1;
+}
+
+.snapshot-grid span {
+  color: #0071bd;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.snapshot-grid strong {
+  overflow: hidden;
+  color: #172330;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.snapshot-grid small {
+  color: #657380;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
 .pattern-switcher {
   display: grid;
   gap: 12px;
@@ -687,6 +787,49 @@
   gap: 11px;
 }
 
+.sales-section-title {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #e3ebf1;
+}
+
+.sales-section-title:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sales-section-title span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-row: 1 / 3;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #0071bd;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.sales-section-title strong {
+  color: #15364f;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.sales-section-title small {
+  color: #657380;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
 .sales-preset-control {
   padding: 11px 12px;
   border: 1px solid #c9d8e4;
@@ -890,6 +1033,13 @@
   min-width: 0;
 }
 
+.control-note {
+  color: #657380;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .help-tip {
   position: relative;
   z-index: 4;
@@ -966,10 +1116,45 @@
   gap: 8px;
 }
 
+.number-input-row {
+  grid-template-columns: 34px minmax(0, 1fr) 34px auto;
+}
+
 .input-row small {
   min-width: 38px;
   color: #6b7785;
   font-size: 12px;
+}
+
+.input-stepper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 38px;
+  border: 1px solid #b9c8d5;
+  border-radius: 6px;
+  background: #f8fbfd;
+  color: #0071bd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.input-stepper:hover,
+.input-stepper:focus {
+  border-color: #0071bd;
+  background: #eef8fd;
+  outline: 3px solid rgba(0, 113, 189, 0.14);
+}
+
+.input-stepper:disabled {
+  border-color: #d6e1e9;
+  background: #f3f7fa;
+  color: #94a2ae;
+  cursor: not-allowed;
 }
 
 .control input,
@@ -2155,10 +2340,93 @@
   padding: 16px 16px 0;
 }
 
+.diagram-legend-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border: 1px solid #d6e3ec;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.diagram-legend-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid #dce6ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #526271;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #16212c;
+}
+
+.legend-line {
+  display: inline-block;
+  width: 24px;
+  height: 0;
+  border-top: 3px solid #0071bd;
+}
+
+.legend-line.is-indoor {
+  border-top-style: dashed;
+  border-top-color: #667788;
+}
+
+.legend-window {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  border: 2px solid #0071bd;
+  border-radius: 3px;
+  background: #dff2fb;
+}
+
+.legend-window.is-namigate {
+  background: rgba(0, 113, 189, 0.34);
+}
+
+.heat-scale {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.heat-scale.is-strong {
+  background: #0f7f5a;
+}
+
+.heat-scale.is-ok {
+  background: #58a8d3;
+}
+
+.heat-scale.is-warn {
+  background: #e3b341;
+}
+
+.heat-scale.is-low {
+  background: #ba3b35;
+}
+
 .position-3d-scene {
   position: relative;
-  min-height: 420px;
-  height: clamp(420px, 42vw, 590px);
+  min-height: 480px;
+  height: clamp(480px, 46vw, 660px);
   overflow: hidden;
   border-radius: 8px;
   background: #f7fafc;
@@ -2182,8 +2450,8 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.88);
   color: #526271;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 850;
   pointer-events: none;
 }
 
@@ -2193,7 +2461,7 @@
   left: 14px;
   bottom: 14px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(126px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 8px;
   width: min(1040px, calc(100% - 28px));
   pointer-events: none;
@@ -2203,7 +2471,7 @@
   display: grid;
   gap: 5px;
   min-width: 0;
-  padding: 10px 11px;
+  padding: 11px 12px;
   border: 1px solid rgba(0, 113, 189, 0.2);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
@@ -2219,7 +2487,7 @@
 
 .position-3d-callout-panel strong {
   color: #101820;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   line-height: 1.05;
 }
@@ -2277,7 +2545,7 @@
 .position-diagram {
   display: block;
   width: 100%;
-  min-height: 260px;
+  min-height: 320px;
   border: 1px solid #dce6ee;
   border-radius: 8px;
   background: #f9fbfd;
@@ -2317,7 +2585,7 @@
   stroke: #0071bd;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 4;
+  stroke-width: 4.8;
 }
 
 .diagram-normal,
@@ -2326,14 +2594,14 @@
   stroke: #6f7f8d;
   stroke-dasharray: 5 5;
   stroke-linecap: round;
-  stroke-width: 2;
+  stroke-width: 2.4;
 }
 
 .diagram-angle {
   fill: none;
   stroke: #c96c34;
   stroke-linecap: round;
-  stroke-width: 2.5;
+  stroke-width: 3;
 }
 
 .diagram-transmitter {
@@ -2369,32 +2637,32 @@
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.9);
   stroke-linejoin: round;
-  stroke-width: 3px;
+  stroke-width: 3.6px;
 }
 
 .diagram-zone-label {
   fill: #687887;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .diagram-label {
   fill: #16212c;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .diagram-accent-label {
   fill: #0071bd;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .diagram-muted-label {
   fill: #5e6f7d;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .diagram-dimension-label {
   fill: #526271;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .position-facts {
@@ -2442,13 +2710,15 @@
 }
 
 .heatmap-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 16px;
+  padding: 16px;
 }
 
 .heatmap-card {
   overflow: hidden;
-  padding: 12px;
+  padding: 14px;
+  border-radius: 8px;
 }
 
 .heatmap-title {
@@ -2461,22 +2731,23 @@
 
 .heatmap-title strong {
   color: #172330;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .heatmap-title span {
   color: #697888;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .heatmap-plan {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .heatmap-outdoor {
   position: relative;
-  height: 62px;
+  height: 76px;
   overflow: hidden;
   border: 1px solid #dce6ee;
   border-radius: 8px;
@@ -2491,7 +2762,7 @@
   left: 10px;
   top: 8px;
   color: #657380;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2505,7 +2776,7 @@
 
 .heatmap-outdoor-label {
   fill: #384757;
-  font-size: 7px;
+  font-size: 8.2px;
   font-weight: 800;
   letter-spacing: 0;
   paint-order: stroke;
@@ -2521,12 +2792,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  min-height: 22px;
-  padding: 3px 8px;
+  min-width: 58px;
+  min-height: 25px;
+  padding: 4px 9px;
   border-radius: 999px;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   transform: translateX(-50%);
@@ -2543,20 +2814,60 @@
   right: 10px;
   bottom: 7px;
   color: #526271;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .heatmap-room {
   position: relative;
 }
 
+.heatmap-route-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.heatmap-route-strip span,
+.heatmap-route-strip strong {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 1px solid #dce6ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #526271;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.heatmap-route-strip strong {
+  border-color: rgba(0, 113, 189, 0.3);
+  background: #eef8fd;
+  color: #0071bd;
+}
+
+.heatmap-route-strip span:first-child::after,
+.heatmap-route-strip strong::after {
+  content: '→';
+  position: absolute;
+  right: -15px;
+  color: #0071bd;
+  font-size: 14px;
+  font-weight: 900;
+}
+
 .heatmap {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 2px;
-  padding: 8px;
+  gap: 3px;
+  padding: 10px;
   border: 1px solid #dce6ee;
   border-radius: 6px;
   background: #f7fafc;
@@ -2565,7 +2876,7 @@
 .heat-cell {
   aspect-ratio: 1;
   min-width: 0;
-  border-radius: 2px;
+  border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
@@ -2589,9 +2900,9 @@
 .heatmap-overlay {
   position: absolute;
   z-index: 2;
-  inset: 8px;
-  width: calc(100% - 16px);
-  height: calc(100% - 16px);
+  inset: 10px;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
   overflow: visible;
   pointer-events: none;
 }
@@ -2608,25 +2919,25 @@
 
 .diagonal-angle-guide {
   display: grid;
-  gap: 8px;
-  padding: 9px;
+  gap: 10px;
+  padding: 11px;
   border: 1px solid #dce6ee;
   border-radius: 8px;
   background: #ffffff;
 }
 
 .diagonal-angle-guide .subsection-heading h3 {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .diagonal-angle-guide .subsection-heading span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .diagonal-angle-guide svg {
   display: block;
   width: 100%;
-  min-height: 150px;
+  min-height: 220px;
   border: 1px solid #edf3f7;
   border-radius: 6px;
   background: #fbfdff;
@@ -2652,7 +2963,7 @@
 .diagonal-guide-window-axis {
   stroke: #0071bd;
   stroke-linecap: round;
-  stroke-width: 4.2;
+  stroke-width: 4.8;
 }
 
 .diagonal-guide-window {
@@ -2683,7 +2994,7 @@
 .diagonal-guide-indoor-ray {
   fill: none;
   stroke-linecap: round;
-  stroke-width: 2.3;
+  stroke-width: 2.8;
 }
 
 .diagonal-guide-indoor-ray {
@@ -2695,31 +3006,31 @@
   fill: none;
   stroke: #c96c34;
   stroke-linecap: round;
-  stroke-width: 1.8;
+  stroke-width: 2.2;
 }
 
 .diagonal-guide-transmitter {
   fill: #16212c;
   stroke: #ffffff;
-  stroke-width: 1.4;
+  stroke-width: 1.6;
 }
 
 .diagonal-guide-receiver {
   fill: #ffffff;
   stroke: #0071bd;
-  stroke-width: 1.6;
+  stroke-width: 1.8;
 }
 
 .diagonal-guide-label,
 .diagonal-guide-accent,
 .diagonal-guide-muted {
-  font-size: 4px;
+  font-size: 4.8px;
   font-weight: 900;
   letter-spacing: 0;
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.9);
   stroke-linejoin: round;
-  stroke-width: 1px;
+  stroke-width: 1.15px;
 }
 
 .diagonal-guide-label {
@@ -2728,6 +3039,11 @@
 
 .diagonal-guide-accent {
   fill: #c96c34;
+}
+
+.diagonal-guide-angle-label {
+  font-size: 4.3px;
+  stroke-width: 1px;
 }
 
 .diagonal-guide-muted {
@@ -2744,7 +3060,7 @@
 .heatmap-window {
   fill: rgba(223, 242, 251, 0.9);
   stroke: #0071bd;
-  stroke-width: 1.4;
+  stroke-width: 1.8;
 }
 
 .heatmap-window.is-reference {
@@ -2755,13 +3071,13 @@
 .heatmap-namigate {
   fill: rgba(0, 113, 189, 0.34);
   stroke: #0071bd;
-  stroke-width: 1.5;
+  stroke-width: 1.9;
 }
 
 .heatmap-indoor-ray {
   fill: none;
   stroke-linecap: round;
-  stroke-width: 1.7;
+  stroke-width: 2.2;
   stroke-dasharray: 3 2;
 }
 
@@ -2769,13 +3085,13 @@
   stroke: #526271;
   stroke-dasharray: 2 2;
   stroke-linecap: round;
-  stroke-width: 1;
+  stroke-width: 1.25;
 }
 
 .heatmap-receiver-dot {
   fill: #ffffff;
   stroke: #0071bd;
-  stroke-width: 1.6;
+  stroke-width: 2;
 }
 
 .heatmap-receiver-core {
@@ -2785,13 +3101,13 @@
 .heatmap-overlay-label,
 .heatmap-overlay-accent,
 .heatmap-dimension-label {
-  font-size: 4px;
+  font-size: 4.8px;
   font-weight: 800;
   letter-spacing: 0;
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.82);
   stroke-linejoin: round;
-  stroke-width: 0.9px;
+  stroke-width: 1.05px;
 }
 
 .heatmap-overlay-label {
@@ -2822,7 +3138,7 @@
 
 .heatmap-measured-label {
   fill: #172330;
-  font-size: 4px;
+  font-size: 4.8px;
   font-weight: 900;
   letter-spacing: 0;
   paint-order: stroke;
@@ -2833,19 +3149,19 @@
 
 .heatmap-plan-legend {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  gap: 7px;
 }
 
 .heatmap-plan-legend span {
   min-width: 0;
-  padding: 5px 7px;
+  padding: 7px 8px;
   border: 1px solid #dce6ee;
   border-radius: 5px;
   background: #f8fbfd;
   color: #526271;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   line-height: 1.25;
 }
 
@@ -3141,6 +3457,7 @@
   }
 
   .control-panel,
+  .snapshot-grid,
   .rsrp-grid,
   .sales-kpi-grid,
   .sales-dimension-grid,

@@ -2655,6 +2655,11 @@
   font-size: 15px;
 }
 
+.diagram-angle-label {
+  fill: #c96c34;
+  font-size: 14px;
+}
+
 .diagram-muted-label {
   fill: #5e6f7d;
   font-size: 13px;

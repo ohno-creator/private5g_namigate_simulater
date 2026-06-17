@@ -6427,15 +6427,36 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
   const windowCenterY = heightToDiagramY(settings.windowCenterHeightM)
   const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
   const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
-  const transmitterX = 70
-  const transmitterY = heightToDiagramY(settings.txAntennaHeightM)
+  const normalOffsetRad = (normalOffsetDeg * Math.PI) / 180
+  const requestedRayDx = 210
+  const maxRayRise = Math.max(windowCenterY - roomY - 22, 24)
+  const normalOffsetTan = Math.tan(normalOffsetRad)
+  const planRayDx =
+    normalOffsetTan <= 0.001
+      ? requestedRayDx
+      : clamp(maxRayRise / normalOffsetTan, 58, requestedRayDx)
+  const planRayRise = Math.min(normalOffsetTan * planRayDx, maxRayRise)
+  const transmitterX = windowX - planRayDx
+  const transmitterY = windowCenterY - planRayRise
   const receiverX =
     roomX +
     34 +
     clamp(settings.indoorDistanceM / Math.max(settings.roomDepthM, 1), 0, 1) *
       (roomWidth - 82)
-  const receiverY = heightToDiagramY(settings.rxAntennaHeightM)
+  const receiverY = windowCenterY
   const normalStartX = windowX - 90
+  const angleArcRadius = 38
+  const safeAngleRad = (safeAngle * Math.PI) / 180
+  const angleArcStart = {
+    x: windowX,
+    y: windowCenterY - angleArcRadius,
+  }
+  const angleArcEnd = {
+    x: windowX - Math.cos(normalOffsetRad) * angleArcRadius,
+    y: windowCenterY - Math.sin(normalOffsetRad) * angleArcRadius,
+  }
+  const angleLabelX = windowX - Math.sin(safeAngleRad / 2) * (angleArcRadius + 28)
+  const angleLabelY = windowCenterY - Math.cos(safeAngleRad / 2) * (angleArcRadius + 28)
   const windowLabel =
     WINDOW_PRESETS.find((preset) => preset.id === settings.windowPresetId)?.label ??
     '任意'
@@ -6489,6 +6510,9 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
         </text>
         <text className="diagram-zone-label" x={roomX + 16} y="70">
           室内
+        </text>
+        <text className="diagram-muted-label" x="40" y="238">
+          2D平面角度図（高さ差は数値表示）
         </text>
 
         <line className="diagram-wall" x1={windowX} y1={roomY} x2={windowX} y2={roomY + roomHeight} />
@@ -6580,10 +6604,16 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
 
         <path
           className="diagram-angle"
-          d={`M ${windowX - 58} ${windowCenterY} Q ${windowX - 44} ${
-            windowCenterY - 25
-          } ${windowX - 18} ${windowCenterY - 36}`}
+          d={`M ${angleArcStart.x} ${angleArcStart.y} A ${angleArcRadius} ${angleArcRadius} 0 0 0 ${angleArcEnd.x} ${angleArcEnd.y}`}
         />
+        <text
+          className="diagram-accent-label diagram-angle-label"
+          textAnchor="middle"
+          x={angleLabelX}
+          y={angleLabelY - 5}
+        >
+          窓面との角度 {numberFormatter.format(safeAngle)}°
+        </text>
 
         <text className="diagram-label" x={transmitterX - 48} y={transmitterY - 34}>
           送信機
@@ -6613,8 +6643,7 @@ function PositionDiagram({ settings, angleLossDb, areaGainDb }: PositionDiagramP
           室内3D {formatMeters(calculateIndoorLinkDistanceM(settings))}
         </text>
         <text className="diagram-muted-label" x={windowX - 95} y={windowCenterY - 18}>
-          窓面基準 {numberFormatter.format(safeAngle)}° / 法線ずれ{' '}
-          {numberFormatter.format(normalOffsetDeg)}°
+          法線ずれ {numberFormatter.format(normalOffsetDeg)}°
         </text>
         <text className="diagram-muted-label" x={windowX - 95} y={windowCenterY - 3}>
           入射角損失 {formatDb(angleLossDb)}

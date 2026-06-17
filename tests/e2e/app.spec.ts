@@ -359,6 +359,16 @@ test('入力変更でプリセット値と可視化ラベルが更新される',
   expect(afterDistanceChange[0]).toBeLessThan(beforeDistanceChange[0])
   expect(afterDistanceChange[1]).toBeLessThan(beforeDistanceChange[1])
   expect(afterDistanceChange[2]).toBeLessThan(beforeDistanceChange[2])
+
+  await openInputStep(page, '窓・室内')
+  await controlInput(page, '入射角').fill('90')
+  await openTab(page, '位置・分布')
+  await expect(page.getByText('窓面との角度 90°')).toBeVisible()
+  const rayPath = await page.locator('.diagram-ray').getAttribute('d')
+  const rayCoords = rayPath?.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? []
+  expect(rayCoords).toHaveLength(6)
+  expect(rayCoords[1]).toBeCloseTo(rayCoords[3], 1)
+  expect(rayCoords[3]).toBeCloseTo(rayCoords[5], 1)
 })
 
 test('シミュレーション結果が角度・窓・距離・改善量の組み合わせで一貫する', async ({

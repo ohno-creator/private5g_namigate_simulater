@@ -232,6 +232,59 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   await expect(page.locator('.position-3d-facts')).toContainText('角欠け')
 
   await page.getByRole('button', { name: /営業用簡易モード/ }).click()
+  await presetSelect.selectOption('diagonalCornerRuTest')
+  await expect(presetSelect).toHaveValue('diagonalCornerRuTest')
+  await expect(controlSelect(page, '間取りプリセット')).toHaveValue(
+    'diagonalCornerWindow',
+  )
+  await expect(controlSelect(page, '窓サイズプリセット')).toHaveValue('wide')
+  await expect(controlInput(page, '屋外距離')).toHaveValue('336.04')
+  await expect(controlInput(page, '入射角')).toHaveValue('45')
+  await expect(controlInput(page, '室内距離')).toHaveValue('1')
+  await expect(controlInput(page, '測定高さ')).toHaveValue('4.5')
+  await expect(controlInput(page, '部屋幅')).toHaveValue('10')
+  await expect(controlInput(page, '部屋奥行')).toHaveValue('12')
+  await expect(controlInput(page, '窓幅')).toHaveValue('3.6')
+  await expect(controlInput(page, '窓中心高')).toHaveValue('4.5')
+  await expect(page.getByText(/斜め窓面長/)).toBeVisible()
+  await expect(page.getByText('方位91.35°')).toBeVisible()
+  await controlInput(page, '部屋幅').fill('11')
+  await expect(presetSelect).toHaveValue('custom')
+  await expect(controlSelect(page, '間取りプリセット')).toHaveValue(
+    'diagonalCornerWindow',
+  )
+
+  await switchToTechnicalMode(page)
+  await openInputStep(page, '窓・室内')
+  await expect(controlSelect(page, '間取りプリセット')).toHaveValue(
+    'diagonalCornerWindow',
+  )
+  await expect(controlInput(page, '部屋幅')).toHaveValue('11')
+  await expect(controlInput(page, '角欠け幅')).toHaveValue('3')
+  await expect(controlInput(page, '角欠け奥行')).toHaveValue('3')
+  await expect(controlInput(page, '窓中心高')).toHaveValue('4.5')
+
+  await openTab(page, '位置・分布')
+  await expect(page.locator('.heatmap-plan-legend').first()).toContainText(
+    '斜め角欠け',
+  )
+  await expect(page.locator('.heatmap-notch').first()).toBeVisible()
+  await expect(page.locator('.position-3d-facts')).toContainText('斜め角欠け')
+  const diagonalCanvasInfo = await page
+    .locator('.position-3d-canvas')
+    .evaluate((element) => {
+      const canvasElement = element as HTMLCanvasElement
+      return {
+        dataUrlLength: canvasElement.toDataURL('image/png').length,
+        height: canvasElement.height,
+        width: canvasElement.width,
+      }
+    })
+  expect(diagonalCanvasInfo.width).toBeGreaterThan(250)
+  expect(diagonalCanvasInfo.height).toBeGreaterThan(250)
+  expect(diagonalCanvasInfo.dataUrlLength).toBeGreaterThan(1_000)
+
+  await page.getByRole('button', { name: /営業用簡易モード/ }).click()
   await presetSelect.selectOption('singleGlassNear')
   await expect(presetSelect).toHaveValue('singleGlassNear')
   await expect(controlInput(page, '屋外距離')).toHaveValue('50')

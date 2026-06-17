@@ -46,13 +46,19 @@ type SalesPresetId =
   | 'custom'
   | 'fieldTestRu100MhzTdd'
   | 'notchedCornerRuTest'
+  | 'diagonalCornerRuTest'
   | 'singleGlassNear'
   | 'doubleGlassOffice'
   | 'lowEStandard'
   | 'lowESevere'
   | 'mmwaveWindow'
   | 'noNamigateCompare'
-type RoomLayoutPresetId = 'rectangle' | 'notchedCornerWindow' | 'custom'
+type RoomLayoutPresetId =
+  | 'rectangle'
+  | 'notchedCornerWindow'
+  | 'diagonalCornerWindow'
+  | 'custom'
+type RoomNotchShape = 'none' | 'rectangular' | 'diagonal'
 type WindowSizePresetId = 'standard' | 'wide' | 'small' | 'tall' | 'custom'
 type BuildingMaterialPresetId =
   | 'reinforcedConcrete'
@@ -379,6 +385,19 @@ const ROOM_LAYOUT_PRESETS: {
     },
   },
   {
+    id: 'diagonalCornerWindow',
+    label: '斜め角欠け・斜め窓',
+    description:
+      '建物の前面左角を斜めに切った間取りです。斜めカット面の中央にある窓へ向けて送受信する実地試験パターンです。',
+    settings: {
+      roomLayoutPresetId: 'diagonalCornerWindow',
+      roomWidthM: 10,
+      roomDepthM: 12,
+      notchWidthM: 3,
+      notchDepthM: 3,
+    },
+  },
+  {
     id: 'custom',
     label: '任意の間取り寸法',
     description: '部屋寸法や角欠け寸法を手入力した状態です。',
@@ -477,6 +496,7 @@ const SALES_PRESETS: {
   description: string
   settings?: Partial<Settings>
   measurementHeightM?: number
+  protocol?: ProtocolDraft
 }[] = [
   {
     id: 'custom',
@@ -543,6 +563,56 @@ const SALES_PRESETS: {
       indoorDistanceM: 8,
       indoorPathLossExponent: 2.2,
       rxAntennaHeightM: 1.2,
+      namigatePresetId: 'lowEExample',
+      namigateGainDb: 25,
+      namigateWidthCm: 20,
+      namigateHeightCm: 20,
+      namigateAreaGainScale: 1,
+      namigateMaxTotalGainDb: 40,
+    },
+  },
+  {
+    id: 'diagonalCornerRuTest',
+    label: '約336m・斜め窓2階実測',
+    description:
+      '右側建物方向の基地局から約336.04m、方位91.35°で、0m地点の2階斜め窓面を受信点にする現地条件です。固有名は表示せず、現地測定メモとして扱います。',
+    measurementHeightM: 4.5,
+    protocol: {
+      siteName: '約336m・斜め窓2階実測',
+      measurementHeightM: 4.5,
+      antennaDirection: '右側建物方向 / 方位91.35° / 斜め窓面',
+      notes:
+        '基地局は測線上の約336.04m地点、受信局は0m地点の2階マーク位置。固有社名・顧客名は記録しない。',
+      checklist: {
+        sameHeight: true,
+        fixedWindowPosition: true,
+        sameAntennaDirection: true,
+      },
+    },
+    settings: {
+      modulePresetId: 'fieldTestRu100MhzTdd',
+      frequencyMHz: 4700,
+      eirpMode: 'direct',
+      eirpDbm: 43,
+      outdoorDistanceM: 336.04,
+      txAntennaHeightM: 18.9,
+      roomLayoutPresetId: 'diagonalCornerWindow',
+      roomWidthM: 10,
+      roomDepthM: 12,
+      notchWidthM: 3,
+      notchDepthM: 3,
+      windowSizePresetId: 'wide',
+      windowWidthM: 3.6,
+      windowHeightM: 1.6,
+      windowCenterHeightM: 4.5,
+      buildingMaterialPresetId: 'reinforcedConcrete',
+      buildingMaterialLossDb: 3,
+      windowPresetId: 'lowE',
+      windowLossDb: 40,
+      incidentAngleDeg: 45,
+      indoorDistanceM: 1,
+      indoorPathLossExponent: 2.2,
+      rxAntennaHeightM: 4.5,
       namigatePresetId: 'lowEExample',
       namigateGainDb: 25,
       namigateWidthCm: 20,
@@ -2206,11 +2276,17 @@ function calculateMaxReachM(settings: Settings, scenario: ScenarioKey) {
 function getRoomLayoutMetrics(settings: Settings) {
   const roomWidthM = Math.max(settings.roomWidthM, 1)
   const roomDepthM = Math.max(settings.roomDepthM, 1)
-  const isNotched =
-    settings.roomLayoutPresetId === 'notchedCornerWindow' ||
+  const hasCustomNotch =
     (settings.roomLayoutPresetId === 'custom' &&
       settings.notchWidthM > 0 &&
       settings.notchDepthM > 0)
+  const notchShape: RoomNotchShape =
+    settings.roomLayoutPresetId === 'diagonalCornerWindow'
+      ? 'diagonal'
+      : settings.roomLayoutPresetId === 'notchedCornerWindow' || hasCustomNotch
+        ? 'rectangular'
+        : 'none'
+  const isNotched = notchShape !== 'none'
   const notchWidthM = isNotched
     ? clamp(settings.notchWidthM, 0.5, roomWidthM * 0.65)
     : 0
@@ -2222,30 +2298,108 @@ function getRoomLayoutMetrics(settings: Settings) {
     roomWidthM,
     roomDepthM,
     isNotched,
+    isDiagonalNotched: notchShape === 'diagonal',
+    notchShape,
     notchWidthM,
     notchDepthM,
   }
 }
 
-function getWindowPlanPositionM(settings: Settings) {
-  const { roomWidthM, isNotched, notchWidthM, notchDepthM } =
+function getWindowFaceGeometryM(settings: Settings) {
+  const { roomWidthM, isNotched, isDiagonalNotched, notchWidthM, notchDepthM } =
     getRoomLayoutMetrics(settings)
+
+  if (isDiagonalNotched) {
+    const start = { xM: notchWidthM, yM: 0 }
+    const end = { xM: 0, yM: notchDepthM }
+    const lengthM = Math.max(Math.hypot(end.xM - start.xM, end.yM - start.yM), 0.1)
+
+    return {
+      start,
+      end,
+      center: {
+        xM: (start.xM + end.xM) / 2,
+        yM: (start.yM + end.yM) / 2,
+      },
+      tangent: {
+        xM: (end.xM - start.xM) / lengthM,
+        yM: (end.yM - start.yM) / lengthM,
+      },
+      inwardNormal: {
+        xM: notchDepthM / lengthM,
+        yM: notchWidthM / lengthM,
+      },
+      outwardNormal: {
+        xM: -notchDepthM / lengthM,
+        yM: -notchWidthM / lengthM,
+      },
+      lengthM,
+    }
+  }
 
   if (isNotched) {
     return {
-      xM: Math.max(notchWidthM / 2, 0.1),
-      yM: notchDepthM,
+      start: { xM: 0, yM: notchDepthM },
+      end: { xM: notchWidthM, yM: notchDepthM },
+      center: {
+        xM: Math.max(notchWidthM / 2, 0.1),
+        yM: notchDepthM,
+      },
+      tangent: { xM: 1, yM: 0 },
+      inwardNormal: { xM: 0, yM: 1 },
+      outwardNormal: { xM: 0, yM: -1 },
+      lengthM: notchWidthM,
     }
   }
 
   return {
-    xM: roomWidthM / 2,
-    yM: 0,
+    start: { xM: 0, yM: 0 },
+    end: { xM: roomWidthM, yM: 0 },
+    center: {
+      xM: roomWidthM / 2,
+      yM: 0,
+    },
+    tangent: { xM: 1, yM: 0 },
+    inwardNormal: { xM: 0, yM: 1 },
+    outwardNormal: { xM: 0, yM: -1 },
+    lengthM: roomWidthM,
+  }
+}
+
+function getWindowPlanPositionM(settings: Settings) {
+  return getWindowFaceGeometryM(settings).center
+}
+
+function getReceiverPlanPositionM(
+  settings: Settings,
+  indoorDistanceM = settings.indoorDistanceM,
+) {
+  const { roomWidthM, roomDepthM } = getRoomLayoutMetrics(settings)
+  const face = getWindowFaceGeometryM(settings)
+
+  return {
+    xM: clamp(
+      face.center.xM + face.inwardNormal.xM * indoorDistanceM,
+      0.15,
+      roomWidthM - 0.15,
+    ),
+    yM: clamp(
+      face.center.yM + face.inwardNormal.yM * indoorDistanceM,
+      0.15,
+      roomDepthM - 0.15,
+    ),
   }
 }
 
 function isPointInsideRoom(settings: Settings, xM: number, yM: number) {
-  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+  const {
+    roomWidthM,
+    roomDepthM,
+    isNotched,
+    isDiagonalNotched,
+    notchWidthM,
+    notchDepthM,
+  } =
     getRoomLayoutMetrics(settings)
 
   if (xM < 0 || xM > roomWidthM || yM < 0 || yM > roomDepthM) {
@@ -2256,13 +2410,30 @@ function isPointInsideRoom(settings: Settings, xM: number, yM: number) {
     return true
   }
 
+  if (isDiagonalNotched) {
+    return !(
+      xM < notchWidthM &&
+      yM < notchDepthM &&
+      xM / notchWidthM + yM / notchDepthM < 1
+    )
+  }
+
   return !(xM < notchWidthM && yM < notchDepthM)
 }
 
 function calculateEffectiveRoomAreaM2(settings: Settings) {
-  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+  const {
+    roomWidthM,
+    roomDepthM,
+    isNotched,
+    isDiagonalNotched,
+    notchWidthM,
+    notchDepthM,
+  } =
     getRoomLayoutMetrics(settings)
-  const notchAreaM2 = isNotched ? notchWidthM * notchDepthM : 0
+  const notchAreaM2 = isNotched
+    ? notchWidthM * notchDepthM * (isDiagonalNotched ? 0.5 : 1)
+    : 0
 
   return Math.max(roomWidthM * roomDepthM - notchAreaM2, 1)
 }
@@ -3163,7 +3334,8 @@ function getBuildingMaterialPresetLabel(id: BuildingMaterialPresetId) {
 }
 
 function getRoomLayoutSummary(settings: Settings) {
-  const { isNotched, notchWidthM, notchDepthM } = getRoomLayoutMetrics(settings)
+  const { isNotched, isDiagonalNotched, notchWidthM, notchDepthM } =
+    getRoomLayoutMetrics(settings)
   const base = `${getRoomLayoutPresetLabel(
     settings.roomLayoutPresetId,
   )} / 部屋 ${numberFormatter.format(settings.roomWidthM)}×${numberFormatter.format(
@@ -3174,7 +3346,7 @@ function getRoomLayoutSummary(settings: Settings) {
     return base
   }
 
-  return `${base} / 角欠け ${numberFormatter.format(
+  return `${base} / ${isDiagonalNotched ? '斜めカット' : '角欠け'} ${numberFormatter.format(
     notchWidthM,
   )}×${numberFormatter.format(notchDepthM)}m`
 }
@@ -3191,6 +3363,10 @@ function getBuildingMaterialSummary(settings: Settings) {
   return `${getBuildingMaterialPresetLabel(
     settings.buildingMaterialPresetId,
   )} / 補正 ${formatDb(settings.buildingMaterialLossDb)}`
+}
+
+function getCutFaceLengthM(settings: Settings) {
+  return getWindowFaceGeometryM(settings).lengthM
 }
 
 function describeResidual(residualDb: number | null) {
@@ -4091,13 +4267,19 @@ function PositionScene3D({
     const notchWidthM = clamp(layoutMetrics.notchWidthM, 0, roomWidthM * 0.65)
     const notchDepthM = clamp(layoutMetrics.notchDepthM, 0, roomDepthM * 0.65)
     const isNotched = layoutMetrics.isNotched
-    const windowPlanPosition = getWindowPlanPositionM(settings)
+    const isDiagonalNotched = layoutMetrics.isDiagonalNotched
+    const faceGeometry = getWindowFaceGeometryM(settings)
+    const windowPlanPosition = faceGeometry.center
+    const receiverPlanPosition = getReceiverPlanPositionM(settings)
     const windowPlanX = clamp(
       windowPlanPosition.xM - roomWidthM / 2,
       -roomWidthM / 2 + 0.35,
       roomWidthM / 2 - 0.35,
     )
     const windowPlanZ = clamp(windowPlanPosition.yM, 0, roomDepthM - 0.4)
+    const wallDxM = faceGeometry.end.xM - faceGeometry.start.xM
+    const wallDyM = faceGeometry.end.yM - faceGeometry.start.yM
+    const windowRotationY = Math.atan2(-wallDyM, wallDxM)
 	    const windowWidthM = clamp(settings.windowWidthM, 0.2, roomWidthM)
 	    const windowHeightM = clamp(settings.windowHeightM, 0.2, 4)
 	    const namigateWidthM = clamp(settings.namigateWidthCm / 100, 0.05, windowWidthM)
@@ -4116,22 +4298,37 @@ function PositionScene3D({
 	      transmitterHeightY + 0.8,
 	      receiverHeightY + 0.8,
 	    )
-	    const receiverZ = clamp(
-	      windowPlanZ + settings.indoorDistanceM,
-	      0.7,
-	      roomDepthM - 0.45,
+	    const receiverX = clamp(
+	      receiverPlanPosition.xM - roomWidthM / 2,
+	      -roomWidthM / 2 + 0.35,
+	      roomWidthM / 2 - 0.35,
 	    )
+	    const receiverZ = clamp(receiverPlanPosition.yM, 0.7, roomDepthM - 0.45)
 	    const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
 	    const outdoorDisplayM = clamp(Math.log10(Math.max(settings.outdoorDistanceM, 1)) * 2.6, 3, 9)
+	    const lateralOffsetM =
+	      Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM
+	    const transmitterPlanX =
+	      windowPlanPosition.xM +
+	      faceGeometry.outwardNormal.xM * outdoorDisplayM -
+	      faceGeometry.tangent.xM * lateralOffsetM
+	    const transmitterPlanY =
+	      windowPlanPosition.yM +
+	      faceGeometry.outwardNormal.yM * outdoorDisplayM -
+	      faceGeometry.tangent.yM * lateralOffsetM
     const transmitterX = clamp(
-      windowPlanX - Math.tan(((90 - safeAngle) * Math.PI) / 180) * outdoorDisplayM,
-      -roomWidthM / 2 + 0.6,
-      roomWidthM / 2 - 0.6,
+      transmitterPlanX - roomWidthM / 2,
+      -roomWidthM / 2 - 5,
+      roomWidthM / 2 + 2,
 	    )
-	    const transmitterZ = -outdoorDisplayM
+	    const transmitterZ = clamp(
+	      transmitterPlanY,
+	      -outdoorDisplayM * 1.25,
+	      roomDepthM + 1,
+	    )
 	    const transmitterPoint = new THREE.Vector3(transmitterX, transmitterHeightY, transmitterZ)
 	    const windowPoint = new THREE.Vector3(windowPlanX, windowCenterY, windowPlanZ)
-	    const receiverPoint = new THREE.Vector3(windowPlanX, receiverHeightY, receiverZ)
+	    const receiverPoint = new THREE.Vector3(receiverX, receiverHeightY, receiverZ)
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xf7fafc)
@@ -4170,7 +4367,14 @@ function PositionScene3D({
       side: THREE.DoubleSide,
     })
     const floorShape = new THREE.Shape()
-    if (isNotched) {
+    if (isDiagonalNotched) {
+      floorShape.moveTo(-roomWidthM / 2 + notchWidthM, 0)
+      floorShape.lineTo(roomWidthM / 2, 0)
+      floorShape.lineTo(roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, roomDepthM)
+      floorShape.lineTo(-roomWidthM / 2, notchDepthM)
+      floorShape.lineTo(-roomWidthM / 2 + notchWidthM, 0)
+    } else if (isNotched) {
       floorShape.moveTo(-roomWidthM / 2 + notchWidthM, 0)
       floorShape.lineTo(roomWidthM / 2, 0)
       floorShape.lineTo(roomWidthM / 2, roomDepthM)
@@ -4199,7 +4403,16 @@ function PositionScene3D({
     grid.position.set(0, 0.012, roomDepthM / 2)
     scene.add(grid)
 
-    const outlinePoints = isNotched
+    const outlinePoints = isDiagonalNotched
+      ? [
+          new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, 0),
+          new THREE.Vector3(roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, roomDepthM),
+          new THREE.Vector3(-roomWidthM / 2, 0.04, notchDepthM),
+          new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, 0),
+        ]
+      : isNotched
       ? [
           new THREE.Vector3(-roomWidthM / 2 + notchWidthM, 0.04, 0),
           new THREE.Vector3(roomWidthM / 2, 0.04, 0),
@@ -4224,21 +4437,35 @@ function PositionScene3D({
     )
 
     if (isNotched) {
-      const notchPlane = new THREE.Mesh(
-        new THREE.PlaneGeometry(notchWidthM, notchDepthM),
-        new THREE.MeshBasicMaterial({
-          color: 0x9aa7b3,
-          transparent: true,
-          opacity: 0.18,
-          side: THREE.DoubleSide,
-        }),
-      )
-      notchPlane.rotation.x = -Math.PI / 2
-      notchPlane.position.set(
-        -roomWidthM / 2 + notchWidthM / 2,
-        0.035,
-        notchDepthM / 2,
-      )
+      const notchMaterial = new THREE.MeshBasicMaterial({
+        color: 0x9aa7b3,
+        transparent: true,
+        opacity: 0.18,
+        side: THREE.DoubleSide,
+      })
+      const notchPlane = isDiagonalNotched
+        ? (() => {
+            const triangle = new THREE.Shape()
+            triangle.moveTo(-roomWidthM / 2, 0)
+            triangle.lineTo(-roomWidthM / 2 + notchWidthM, 0)
+            triangle.lineTo(-roomWidthM / 2, notchDepthM)
+            triangle.lineTo(-roomWidthM / 2, 0)
+            return new THREE.Mesh(new THREE.ShapeGeometry(triangle), notchMaterial)
+          })()
+        : new THREE.Mesh(
+            new THREE.PlaneGeometry(notchWidthM, notchDepthM),
+            notchMaterial,
+          )
+      notchPlane.rotation.x = isDiagonalNotched ? Math.PI / 2 : -Math.PI / 2
+      if (!isDiagonalNotched) {
+        notchPlane.position.set(
+          -roomWidthM / 2 + notchWidthM / 2,
+          0.035,
+          notchDepthM / 2,
+        )
+      } else {
+        notchPlane.position.y = 0.035
+      }
       scene.add(notchPlane)
     }
 
@@ -4273,18 +4500,28 @@ function PositionScene3D({
       wallFrame.position.copy(wall.position)
       scene.add(wallFrame)
     }
+    const addWallSegment = (
+      start: { xM: number; yM: number },
+      end: { xM: number; yM: number },
+    ) => {
+      const startX = start.xM - roomWidthM / 2
+      const endX = end.xM - roomWidthM / 2
+      const startZ = start.yM
+      const endZ = end.yM
+      const widthM = Math.max(Math.hypot(endX - startX, endZ - startZ), 0.1)
+      const rotationY = Math.atan2(-(endZ - startZ), endX - startX)
+      addWallPanel(widthM, (startX + endX) / 2, (startZ + endZ) / 2, rotationY)
+    }
 
-    if (isNotched) {
-      addWallPanel(roomWidthM - notchWidthM, notchWidthM / 2, 0)
-      addWallPanel(notchWidthM, -roomWidthM / 2 + notchWidthM / 2, notchDepthM)
-      addWallPanel(
-        notchDepthM,
-        -roomWidthM / 2 + notchWidthM,
-        notchDepthM / 2,
-        Math.PI / 2,
-      )
+    if (isDiagonalNotched) {
+      addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: roomWidthM, yM: 0 })
+      addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: 0, yM: notchDepthM })
+    } else if (isNotched) {
+      addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: roomWidthM, yM: 0 })
+      addWallSegment({ xM: 0, yM: notchDepthM }, { xM: notchWidthM, yM: notchDepthM })
+      addWallSegment({ xM: notchWidthM, yM: 0 }, { xM: notchWidthM, yM: notchDepthM })
     } else {
-      addWallPanel(roomWidthM, 0, 0)
+      addWallSegment({ xM: 0, yM: 0 }, { xM: roomWidthM, yM: 0 })
     }
 
     const windowGlass = new THREE.Mesh(
@@ -4299,13 +4536,19 @@ function PositionScene3D({
         side: THREE.DoubleSide,
       }),
     )
-    windowGlass.position.set(windowPlanX, windowCenterY, windowPlanZ - 0.025)
+    windowGlass.rotation.y = windowRotationY
+    windowGlass.position.set(
+      windowPlanX + faceGeometry.outwardNormal.xM * 0.025,
+      windowCenterY,
+      windowPlanZ + faceGeometry.outwardNormal.yM * 0.025,
+    )
     scene.add(windowGlass)
 
     const windowFrame = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(windowWidthM, windowHeightM, 0.045)),
       new THREE.LineBasicMaterial({ color: 0x0071bd }),
     )
+    windowFrame.rotation.y = windowRotationY
     windowFrame.position.copy(windowGlass.position)
     scene.add(windowFrame)
 
@@ -4319,7 +4562,12 @@ function PositionScene3D({
         emissiveIntensity: 0.12,
       }),
     )
-    namigate.position.set(windowPlanX, windowCenterY, windowPlanZ - 0.105)
+    namigate.rotation.y = windowRotationY
+    namigate.position.set(
+      windowPlanX + faceGeometry.outwardNormal.xM * 0.105,
+      windowCenterY,
+      windowPlanZ + faceGeometry.outwardNormal.yM * 0.105,
+    )
     namigate.castShadow = true
     scene.add(namigate)
 
@@ -4526,7 +4774,7 @@ function PositionScene3D({
       (transmitterZ + windowPlanZ) / 2,
     )
     const indoorMidPoint = new THREE.Vector3(
-      windowPlanX,
+      (windowPlanX + receiverPoint.x) / 2,
       0.16,
       (windowPlanZ + receiverZ) / 2,
     )
@@ -4801,22 +5049,32 @@ function HeatmapPlan({
   heatmap,
   measurementPoints,
 }: HeatmapPlanProps) {
-  const { roomWidthM, roomDepthM, isNotched, notchWidthM, notchDepthM } =
+  const {
+    roomWidthM,
+    roomDepthM,
+    isNotched,
+    isDiagonalNotched,
+    notchWidthM,
+    notchDepthM,
+  } =
     getRoomLayoutMetrics(settings)
-  const windowPosition = getWindowPlanPositionM(settings)
+  const faceGeometry = getWindowFaceGeometryM(settings)
+  const windowPosition = faceGeometry.center
+  const receiverPosition = getReceiverPlanPositionM(settings)
   const windowXPct = clamp((windowPosition.xM / roomWidthM) * 100, 6, 94)
   const windowYPct = clamp((windowPosition.yM / roomDepthM) * 100, 0, 92)
   const safeAngle = clamp(settings.incidentAngleDeg, 15, 90)
   const transmitterXPct = clamp(
-    windowXPct - Math.tan(((90 - safeAngle) * Math.PI) / 180) * 22,
+    windowXPct +
+      faceGeometry.outwardNormal.xM * 26 -
+      faceGeometry.tangent.xM *
+        Math.tan(((90 - safeAngle) * Math.PI) / 180) *
+        22,
     10,
     90,
   )
-  const receiverYPct = clamp(
-    ((windowPosition.yM + settings.indoorDistanceM) / roomDepthM) * 100,
-    Math.max(windowYPct + 6, 9),
-    94,
-  )
+  const receiverXPct = clamp((receiverPosition.xM / roomWidthM) * 100, 3, 97)
+  const receiverYPct = clamp((receiverPosition.yM / roomDepthM) * 100, 4, 96)
   const windowWidthPct =
     scenario.key === 'noWindow'
       ? clamp((settings.windowWidthM / roomWidthM) * 100, 16, 88)
@@ -4835,6 +5093,16 @@ function HeatmapPlan({
   )
   const notchWidthPct = (notchWidthM / roomWidthM) * 100
   const notchDepthPct = (notchDepthM / roomDepthM) * 100
+  const faceAngleDeg =
+    (Math.atan2(
+      ((faceGeometry.end.yM - faceGeometry.start.yM) / roomDepthM) * 100,
+      ((faceGeometry.end.xM - faceGeometry.start.xM) / roomWidthM) * 100,
+    ) *
+      180) /
+    Math.PI
+  const windowTransform = isDiagonalNotched
+    ? `rotate(${faceAngleDeg} ${windowXPct} ${windowYPct})`
+    : undefined
   const hasNamigate = scenario.key === 'withNamigate'
   const scenarioMeasurements = measurementPoints.filter(
     (point) => point.scenario === scenario.key,
@@ -4897,7 +5165,9 @@ function HeatmapPlan({
                   ? `${formatDbm(cell.rsrpDbm)} / ${
                       cell.isConnected ? '接続可能' : 'しきい値未満'
                     }`
-                  : '角欠け/屋外扱い'
+                  : isDiagonalNotched
+                    ? '斜め角欠け/屋外扱い'
+                    : '角欠け/屋外扱い'
               }
               style={{
                 backgroundColor: cell.isInRoom
@@ -4909,77 +5179,104 @@ function HeatmapPlan({
         </div>
 
         <svg className="heatmap-overlay" viewBox="0 0 100 100" aria-hidden="true">
-          <line className="heatmap-wall-line" x1="0" y1="0" x2="100" y2="0" />
+          <line
+            className="heatmap-wall-line"
+            x1={isNotched ? notchWidthPct : 0}
+            y1="0"
+            x2="100"
+            y2="0"
+          />
           {isNotched ? (
-            <>
-              <rect
-                className="heatmap-notch"
-                x="0"
-                y="0"
-                width={notchWidthPct}
-                height={notchDepthPct}
-              />
-              <line
-                className="heatmap-wall-line"
-                x1={notchWidthPct}
-                y1="0"
-                x2={notchWidthPct}
-                y2={notchDepthPct}
-              />
-              <line
-                className="heatmap-wall-line"
-                x1="0"
-                y1={notchDepthPct}
-                x2={notchWidthPct}
-                y2={notchDepthPct}
-              />
-              <text className="heatmap-dimension-label" x="2.4" y={notchDepthPct / 2}>
-                角欠け
-              </text>
-            </>
+            isDiagonalNotched ? (
+              <>
+                <polygon
+                  className="heatmap-notch"
+                  points={`0,0 ${notchWidthPct},0 0,${notchDepthPct}`}
+                />
+                <line
+                  className="heatmap-wall-line"
+                  x1={notchWidthPct}
+                  y1="0"
+                  x2="0"
+                  y2={notchDepthPct}
+                />
+                <text className="heatmap-dimension-label" x="2.4" y={notchDepthPct / 2}>
+                  斜め角欠け
+                </text>
+              </>
+            ) : (
+              <>
+                <rect
+                  className="heatmap-notch"
+                  x="0"
+                  y="0"
+                  width={notchWidthPct}
+                  height={notchDepthPct}
+                />
+                <line
+                  className="heatmap-wall-line"
+                  x1={notchWidthPct}
+                  y1="0"
+                  x2={notchWidthPct}
+                  y2={notchDepthPct}
+                />
+                <line
+                  className="heatmap-wall-line"
+                  x1="0"
+                  y1={notchDepthPct}
+                  x2={notchWidthPct}
+                  y2={notchDepthPct}
+                />
+                <text className="heatmap-dimension-label" x="2.4" y={notchDepthPct / 2}>
+                  角欠け
+                </text>
+              </>
+            )
           ) : null}
           <line className="heatmap-dimension-line" x1="0" y1="96" x2="100" y2="96" />
           <line className="heatmap-dimension-line" x1="96" y1="0" x2="96" y2="100" />
-          <rect
-            className={
-              scenario.key === 'noWindow'
-                ? 'heatmap-window is-reference'
-                : 'heatmap-window'
-            }
-            x={windowLeftPct}
-            y={windowYPct - 1.8}
-            width={windowWidthPct}
-            height="4.8"
-            rx="1.4"
-          />
-          {hasNamigate ? (
+          <g transform={windowTransform}>
             <rect
-              className="heatmap-namigate"
-              x={namigateLeftPct}
-              y={windowYPct - 3.2}
-              width={namigateWidthPct}
-              height="7.6"
-              rx="1.6"
+              className={
+                scenario.key === 'noWindow'
+                  ? 'heatmap-window is-reference'
+                  : 'heatmap-window'
+              }
+              x={windowLeftPct}
+              y={windowYPct - 1.8}
+              width={windowWidthPct}
+              height="4.8"
+              rx="1.4"
             />
-          ) : null}
+            {hasNamigate ? (
+              <rect
+                className="heatmap-namigate"
+                x={namigateLeftPct}
+                y={windowYPct - 3.2}
+                width={namigateWidthPct}
+                height="7.6"
+                rx="1.6"
+              />
+            ) : null}
+          </g>
           <path
             className="heatmap-indoor-ray"
-            d={`M ${windowXPct} ${windowYPct} L ${windowXPct} ${receiverYPct}`}
+            d={`M ${windowXPct} ${windowYPct} L ${receiverXPct} ${receiverYPct}`}
             stroke={scenario.color}
           />
           <circle
             className="heatmap-receiver-dot"
-            cx={windowXPct}
+            cx={receiverXPct}
             cy={receiverYPct}
             r="4"
           />
           <circle
             className="heatmap-receiver-core"
-            cx={windowXPct}
+            cx={receiverXPct}
             cy={receiverYPct}
             r="1.6"
           />
-          <text className="heatmap-overlay-label" x={windowXPct + 1.8} y={receiverYPct - 3}>
+          <text className="heatmap-overlay-label" x={receiverXPct + 1.8} y={receiverYPct - 3}>
             受信機
           </text>
           <text
@@ -5001,7 +5298,7 @@ function HeatmapPlan({
           </text>
           <text
             className="heatmap-dimension-label"
-            x={windowXPct + 2}
+            x={(windowXPct + receiverXPct) / 2 + 2}
             y={(windowYPct + receiverYPct) / 2}
           >
             室内 {formatMeters(settings.indoorDistanceM)}
@@ -6250,12 +6547,18 @@ function App() {
       }))
     }
 
-    const measurementHeightM = preset.measurementHeightM
-
-    if (measurementHeightM !== undefined) {
+    if (preset.protocol || preset.measurementHeightM !== undefined) {
       setProtocol((current) => ({
         ...current,
-        measurementHeightM,
+        ...(preset.protocol ?? {}),
+        measurementHeightM:
+          preset.measurementHeightM ??
+          preset.protocol?.measurementHeightM ??
+          current.measurementHeightM,
+        checklist: {
+          ...current.checklist,
+          ...(preset.protocol?.checklist ?? {}),
+        },
       }))
     }
 
@@ -6655,7 +6958,7 @@ function App() {
               <label className="control">
                 <TermLabel
                   label="間取りプリセット"
-                  help="長方形の部屋か、前面左角が欠けたL字間取りを選びます。角欠けでは欠けた部分の奥壁にある窓を送受信の基準にします。"
+                  help="長方形、直角の角欠け、斜めカットの角欠けを選びます。斜め角欠けではカット面中央の窓を送受信の基準にします。"
                 />
                 <select
                   value={settings.roomLayoutPresetId}
@@ -6832,6 +7135,104 @@ function App() {
                 }}
               />
             </div>
+            <details className="sales-dimension-panel" open>
+              <summary>
+                <span>間取り・窓の寸法を直接入力</span>
+                <HelpTip text="現地図面や実測メモがある場合に、部屋幅、奥行、斜め角欠け、窓寸法をここで調整します。数値を変えるとプリセットは任意入力になります。" />
+              </summary>
+              <div className="dimension-current-summary">
+                <span>{getRoomLayoutSummary(settings)}</span>
+                <span>{getWindowSizeSummary(settings)}</span>
+                {settings.roomLayoutPresetId === 'diagonalCornerWindow' ? (
+                  <span>斜め窓面長 {formatMeters(getCutFaceLengthM(settings))}</span>
+                ) : null}
+              </div>
+              <div className="sales-dimension-grid">
+                <NumberInput
+                  label="部屋幅"
+                  value={settings.roomWidthM}
+                  min={1}
+                  step={0.5}
+                  unit="m"
+                  help="平面図の横方向寸法です。ヒートマップの横幅と接続可能面積に反映します。"
+                  onChange={(value) => {
+                    updateSetting('roomWidthM', value)
+                  }}
+                />
+                <NumberInput
+                  label="部屋奥行"
+                  value={settings.roomDepthM}
+                  min={1}
+                  step={0.5}
+                  unit="m"
+                  help="窓面から室内奥方向の評価範囲です。到達距離とヒートマップ範囲に反映します。"
+                  onChange={(value) => {
+                    updateSetting('roomDepthM', value)
+                  }}
+                />
+                {settings.roomLayoutPresetId === 'notchedCornerWindow' ||
+                settings.roomLayoutPresetId === 'diagonalCornerWindow' ||
+                settings.roomLayoutPresetId === 'custom' ? (
+                  <>
+                    <NumberInput
+                      label="角欠け幅"
+                      value={settings.notchWidthM}
+                      min={0}
+                      step={0.5}
+                      unit="m"
+                      help="角欠けの横方向寸法です。斜め角欠けでは斜め窓面の片側端点になります。"
+                      onChange={(value) => {
+                        updateSetting('notchWidthM', value)
+                      }}
+                    />
+                    <NumberInput
+                      label="角欠け奥行"
+                      value={settings.notchDepthM}
+                      min={0}
+                      step={0.5}
+                      unit="m"
+                      help="角欠けの奥行方向寸法です。斜め角欠けでは幅端点と結ぶ斜め面を窓面として扱います。"
+                      onChange={(value) => {
+                        updateSetting('notchDepthM', value)
+                      }}
+                    />
+                  </>
+                ) : null}
+                <NumberInput
+                  label="窓幅"
+                  value={settings.windowWidthM}
+                  min={0.2}
+                  step={0.1}
+                  unit="m"
+                  help="窓面に沿った横幅です。3D図と上面図の窓表示に反映します。"
+                  onChange={(value) => {
+                    updateSetting('windowSizePresetId', 'custom')
+                    updateSetting('windowWidthM', value)
+                  }}
+                />
+                <NumberInput
+                  label="窓高さ"
+                  value={settings.windowHeightM}
+                  min={0.2}
+                  step={0.1}
+                  unit="m"
+                  help="窓の上下方向寸法です。3D図の窓高さに反映します。"
+                  onChange={(value) => {
+                    updateSetting('windowSizePresetId', 'custom')
+                    updateSetting('windowHeightM', value)
+                  }}
+                />
+                <NumberInput
+                  label="窓中心高"
+                  value={settings.windowCenterHeightM}
+                  min={0.2}
+                  step={0.1}
+                  unit="m"
+                  help="床面から窓中心までの高さです。2階窓や高所窓の3D距離に効きます。"
+                  onChange={(value) => updateSetting('windowCenterHeightM', value)}
+                />
+              </div>
+            </details>
             <div className="sales-mode-note is-light">
               <strong>営業説明の読み方</strong>
               <span>
@@ -7078,7 +7479,7 @@ function App() {
             <label className="control">
               <TermLabel
                 label="間取りプリセット"
-                help="長方形または角欠けのL字間取りを選びます。角欠けでは欠け奥の窓が送受信基準になります。"
+                help="長方形、直角の角欠け、斜めカットの角欠けを選びます。斜め角欠けでは斜め窓から室内方向へ距離線を引きます。"
               />
               <select
                 value={settings.roomLayoutPresetId}
@@ -7222,7 +7623,6 @@ function App() {
               step={0.5}
               unit="m"
               onChange={(value) => {
-                updateSetting('roomLayoutPresetId', 'custom')
                 updateSetting('roomWidthM', value)
               }}
             />
@@ -7233,11 +7633,11 @@ function App() {
               step={0.5}
               unit="m"
               onChange={(value) => {
-                updateSetting('roomLayoutPresetId', 'custom')
                 updateSetting('roomDepthM', value)
               }}
             />
             {settings.roomLayoutPresetId === 'notchedCornerWindow' ||
+            settings.roomLayoutPresetId === 'diagonalCornerWindow' ||
             settings.roomLayoutPresetId === 'custom' ? (
               <>
                 <NumberInput
@@ -7246,9 +7646,8 @@ function App() {
                   min={0}
                   step={0.5}
                   unit="m"
-                  help="前面左角から横方向に欠けている幅です。角欠け部窓では、この欠け奥の壁に窓がある前提です。"
+                  help="前面左角から横方向に欠けている幅です。直角欠けでは欠け奥壁、斜め角欠けでは斜めカット面の端点になります。"
                   onChange={(value) => {
-                    updateSetting('roomLayoutPresetId', 'custom')
                     updateSetting('notchWidthM', value)
                   }}
                 />
@@ -7258,9 +7657,8 @@ function App() {
                   min={0}
                   step={0.5}
                   unit="m"
-                  help="前面左角から奥方向に欠けている深さです。ヒートマップではこの範囲を屋外/欠け部として除外します。"
+                  help="前面左角から奥方向に欠けている深さです。斜め角欠けでは幅端点と奥行端点を結んだ斜め面を窓面として扱います。"
                   onChange={(value) => {
-                    updateSetting('roomLayoutPresetId', 'custom')
                     updateSetting('notchDepthM', value)
                   }}
                 />

@@ -701,6 +701,66 @@
   line-height: 1.55;
 }
 
+.sales-dimension-panel {
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.sales-dimension-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  color: #15364f;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.sales-dimension-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.sales-dimension-panel summary::after {
+  content: '開閉';
+  flex: 0 0 auto;
+  color: #6a7a88;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.dimension-current-summary {
+  display: grid;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.dimension-current-summary span {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  background: #f8fbfd;
+  color: #536473;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.sales-dimension-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+  border-top: 1px solid #e3ebf1;
+}
+
 .sales-toggle {
   min-height: 44px;
   padding: 9px 10px;
@@ -2738,6 +2798,7 @@
   .control-panel,
   .rsrp-grid,
   .sales-kpi-grid,
+  .sales-dimension-grid,
   .beginner-guide,
   .measurement-input-grid,
   .measurement-summary,

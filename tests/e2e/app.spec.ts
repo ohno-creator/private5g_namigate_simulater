@@ -88,6 +88,8 @@ test('初期表示で3状態比較と主要可視化が表示される', async (
   await expect(page.getByRole('heading', { name: '入力条件' })).toBeVisible()
   await expect(page.getByLabel('営業用簡易入力')).toBeVisible()
   await expect(page.getByLabel('営業用結果サマリー')).toBeVisible()
+  await expect(page.getByLabel('実地試験準備サマリー')).toBeVisible()
+  await expect(page.getByLabel('実地試験準備サマリー')).toContainText('準備度')
   await expect(page.getByRole('button', { name: 'PDFレポート出力' })).toBeVisible()
   await expect(page.getByText('実測前の仮説整理ツール')).toBeVisible()
   await expect(controlSelect(page, '営業用プリセット')).toHaveValue('lowEStandard')
@@ -188,6 +190,7 @@ test('営業用簡易モードからPDFレポート画面を開ける', async ({
     }),
   ).toBeVisible()
   await expect(reportPage.getByText('スタッフ株式会社')).toBeVisible()
+  await expect(reportPage.getByText('実地試験準備サマリー')).toBeVisible()
   await expect(reportPage.getByText('免責・利用範囲')).toBeVisible()
   await expect(reportPage.getByText('RSRP、SINR、RSRQ')).toBeVisible()
   await reportPage.close()
@@ -247,7 +250,8 @@ test('営業用簡易モードで入力プリセットを選択できる', async
   await expect(controlInput(page, '窓幅')).toHaveValue('3.6')
   await expect(controlInput(page, '窓中心高')).toHaveValue('4.5')
   await expect(page.getByText(/斜め窓面長/)).toBeVisible()
-  await expect(page.getByText('方位91.35°')).toBeVisible()
+  await expect(page.getByLabel('実地試験準備サマリー')).toContainText('約336m')
+  await expect(page.getByLabel('実地試験準備サマリー')).toContainText('方位91.35°')
   await controlInput(page, '部屋幅').fill('11')
   await expect(presetSelect).toHaveValue('custom')
   await expect(controlSelect(page, '間取りプリセット')).toHaveValue(
@@ -452,6 +456,10 @@ test('CSV実測点を取り込み校正とレポート作成ができる', async
   await switchToTechnicalMode(page)
 
   await openTab(page, '実測データ')
+  await expect(
+    page.getByRole('region', { name: '実地試験準備', exact: true }),
+  ).toBeVisible()
+  await expect(page.getByLabel('現地測定手順')).toContainText('窓開放相当を測る')
   await page.getByRole('button', { name: 'サンプルCSVを読み込み' }).click()
   await expect(page.getByText('4点の実測データを取り込みました')).toBeVisible()
   const csvComparisonTable = page.getByRole('table', {

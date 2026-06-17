@@ -1459,13 +1459,224 @@
 
 .theory-input-panel,
 .field-effect-panel,
-.field-aid-panel {
+.field-aid-panel,
+.field-readiness-panel {
   display: grid;
   gap: 12px;
   padding: 13px;
   border: 1px solid #d8e2ea;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.field-readiness-panel {
+  border-left: 4px solid #0071bd;
+  background: #fbfdff;
+}
+
+.field-readiness-panel.is-ok {
+  border-left-color: #15845d;
+}
+
+.field-readiness-panel.is-warn {
+  border-left-color: #c96c34;
+}
+
+.field-readiness-panel.is-risk {
+  border-left-color: #ba3b35;
+}
+
+.field-readiness-panel.is-compact {
+  padding: 14px;
+}
+
+.readiness-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.readiness-header > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.readiness-header h3 {
+  margin: 0;
+  color: #122637;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.readiness-header span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.5;
+}
+
+.readiness-score {
+  display: grid;
+  flex: 0 0 132px;
+  justify-items: center;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #c9d8e4;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.readiness-score span,
+.readiness-score small {
+  color: #5a6b79;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.readiness-score strong {
+  color: #0d3148;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.readiness-score.is-ok strong {
+  color: #15845d;
+}
+
+.readiness-score.is-warn strong {
+  color: #b85f21;
+}
+
+.readiness-score.is-risk strong {
+  color: #ba3b35;
+}
+
+.readiness-grid,
+.sequence-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field-readiness-panel.is-compact .readiness-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.readiness-card,
+.sequence-card {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 118px;
+  padding: 12px;
+  border: 1px solid #d8e2ea;
+  border-left: 4px solid #6f7f8d;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.readiness-card.is-ok,
+.sequence-card.is-ok {
+  border-left-color: #15845d;
+}
+
+.readiness-card.is-warn,
+.sequence-card.is-warn {
+  border-left-color: #c96c34;
+}
+
+.readiness-card.is-risk,
+.sequence-card.is-risk {
+  border-left-color: #ba3b35;
+}
+
+.readiness-card span,
+.sequence-card span {
+  color: #526271;
+  font-size: 12px;
+  font-weight: 880;
+  line-height: 1.35;
+}
+
+.readiness-card strong,
+.sequence-card strong {
+  color: #101820;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.readiness-card small,
+.sequence-card small,
+.sequence-card em {
+  color: #657380;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.sequence-card em {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #f1f6fa;
+  color: #33485a;
+  font-weight: 820;
+}
+
+.measurement-sequence {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.readiness-actions {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.readiness-actions > strong {
+  color: #15364f;
+  font-size: 13px;
+}
+
+.readiness-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.readiness-actions span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  background: #f8fbfd;
+  color: #445767;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.readiness-actions span.is-warn {
+  border-color: #f0c89b;
+  background: #fff8ed;
+  color: #945313;
+}
+
+.readiness-actions span.is-risk {
+  border-color: #efc4c2;
+  background: #fff6f5;
+  color: #a3322d;
 }
 
 .theory-input-panel p {
@@ -2750,6 +2961,8 @@
   .pattern-controls,
   .checklist-grid,
   .field-aid-grid,
+  .readiness-grid,
+  .sequence-grid,
   .column-list,
   .evidence-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2811,6 +3024,9 @@
   .pattern-status-grid,
   .checklist-grid,
   .field-aid-grid,
+  .readiness-grid,
+  .field-readiness-panel.is-compact .readiness-grid,
+  .sequence-grid,
   .column-list,
   .position-3d-facts,
   .position-facts,
@@ -2864,6 +3080,17 @@
 
   .section-heading > .label-with-help {
     flex-wrap: wrap;
+  }
+
+  .readiness-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .readiness-score {
+    flex-basis: auto;
+    justify-items: start;
+    text-align: left;
   }
 
   .measurement-table {

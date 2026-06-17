@@ -214,6 +214,34 @@ type FieldAidItem = {
   memo: string
 }
 
+type FieldReadinessStatus = 'ok' | 'warn' | 'risk'
+
+type FieldReadinessItem = {
+  id: string
+  label: string
+  value: string
+  status: FieldReadinessStatus
+  action: string
+}
+
+type FieldReadinessSummary = {
+  scorePercent: number
+  status: FieldReadinessStatus
+  label: string
+  okCount: number
+  warnCount: number
+  riskCount: number
+}
+
+type MeasurementSequenceItem = {
+  id: string
+  title: string
+  scenarioLabel: string
+  status: FieldReadinessStatus
+  sampleText: string
+  instruction: string
+}
+
 type HeatmapPlanProps = {
   settings: Settings
   scenario: ScenarioDefinition
@@ -3033,6 +3061,346 @@ function buildFieldAidItems({
   ] satisfies FieldAidItem[]
 }
 
+function statusLabel(status: FieldReadinessStatus) {
+  if (status === 'ok') {
+    return '準備OK'
+  }
+
+  if (status === 'warn') {
+    return '要確認'
+  }
+
+  return '要準備'
+}
+
+function summarizeFieldReadiness(
+  items: FieldReadinessItem[],
+): FieldReadinessSummary {
+  const okCount = items.filter((item) => item.status === 'ok').length
+  const warnCount = items.filter((item) => item.status === 'warn').length
+  const riskCount = items.filter((item) => item.status === 'risk').length
+  const score =
+    items.length === 0
+      ? 0
+      : items.reduce((sum, item) => {
+          if (item.status === 'ok') {
+            return sum + 100
+          }
+
+          if (item.status === 'warn') {
+            return sum + 60
+          }
+
+          return sum
+        }, 0) / items.length
+  const scorePercent = Math.round(score)
+  const status: FieldReadinessStatus =
+    scorePercent >= 80 ? 'ok' : scorePercent >= 50 ? 'warn' : 'risk'
+
+  return {
+    scorePercent,
+    status,
+    label:
+      status === 'ok'
+        ? '現地試験に進める水準'
+        : status === 'warn'
+          ? '測定前に一部確認'
+          : '測定条件の追加が必要',
+    okCount,
+    warnCount,
+    riskCount,
+  }
+}
+
+function scenarioPointCounts(points: PointComparison[]) {
+  return SCENARIOS.reduce(
+    (accumulator, scenario) => ({
+      ...accumulator,
+      [scenario.key]: points.filter((point) => point.scenario === scenario.key).length,
+    }),
+    {} as Record<ScenarioKey, number>,
+  )
+}
+
+function buildFieldReadinessItems({
+  settings,
+  protocol,
+  measuredSampleStats,
+  theoryComparisons,
+  pointComparisons,
+}: {
+  settings: Settings
+  protocol: TestProtocol
+  measuredSampleStats: Record<ScenarioKey, RsrpSampleStats>
+  theoryComparisons: TheoryComparison[]
+  pointComparisons: PointComparison[]
+}) {
+  const targetSamples = Math.max(protocol.observationCount, 1)
+  const manualCounts = SCENARIOS.reduce(
+    (accumulator, scenario) => ({
+      ...accumulator,
+      [scenario.key]: measuredSampleStats[scenario.key].count,
+    }),
+    {} as Record<ScenarioKey, number>,
+  )
+  const pointCounts = scenarioPointCounts(pointComparisons)
+  const minManualCount = Math.min(...Object.values(manualCounts))
+  const minPointCount = Math.min(...Object.values(pointCounts))
+  const hasAllManualStates = minManualCount > 0
+  const hasAllCsvStates = minPointCount > 0
+  const theoryCount = theoryComparisons.filter(
+    (comparison) => comparison.theoryRsrpDbm !== null,
+  ).length
+  const checklistCount = Object.values(protocol.checklist).filter(Boolean).length
+  const fixedConditionCount = [
+    protocol.checklist.sameDevice,
+    protocol.checklist.sameHeight,
+    protocol.checklist.sameAntennaDirection,
+    protocol.checklist.fixedWindowPosition,
+  ].filter(Boolean).length
+  const heightGapM = Math.abs(protocol.measurementHeightM - settings.rxAntennaHeightM)
+  const siteMemoParts = [
+    protocol.siteName.trim(),
+    protocol.antennaDirection.trim(),
+    protocol.notes.trim(),
+  ].filter(Boolean)
+  const sinrCount = pointComparisons.filter((point) => point.sinrDb !== null).length
+  const throughputCount = pointComparisons.filter(
+    (point) => point.dlMbps !== null || point.ulMbps !== null,
+  ).length
+  const hasWindowGeometry =
+    settings.windowWidthM > 0 &&
+    settings.windowHeightM > 0 &&
+    settings.windowCenterHeightM > 0
+  const hasNamigateGeometry =
+    settings.namigateWidthCm > 0 && settings.namigateHeightCm > 0
+  const manualText = SCENARIOS.map(
+    (scenario) => `${scenario.label}${manualCounts[scenario.key]}`,
+  ).join(' / ')
+  const csvText = SCENARIOS.map(
+    (scenario) => `${scenario.label}${pointCounts[scenario.key]}`,
+  ).join(' / ')
+  const sampleStatus: FieldReadinessStatus =
+    minManualCount >= targetSamples || minPointCount >= 3
+      ? 'ok'
+      : hasAllManualStates || hasAllCsvStates
+        ? 'warn'
+        : 'risk'
+  const planStatus: FieldReadinessStatus =
+    protocol.observationCount >= 30 && protocol.averagingSeconds >= 30
+      ? 'ok'
+      : protocol.observationCount >= 10 && protocol.averagingSeconds >= 10
+        ? 'warn'
+        : 'risk'
+  const siteStatus: FieldReadinessStatus =
+    siteMemoParts.length >= 3 ? 'ok' : siteMemoParts.length > 0 ? 'warn' : 'risk'
+  const geometryStatus: FieldReadinessStatus =
+    settings.outdoorDistanceM > 0 &&
+    protocol.measurementHeightM > 0 &&
+    settings.rxAntennaHeightM > 0 &&
+    heightGapM <= 0.3
+      ? 'ok'
+      : settings.outdoorDistanceM > 0 && protocol.measurementHeightM > 0
+        ? 'warn'
+        : 'risk'
+  const csvStatus: FieldReadinessStatus =
+    minPointCount >= 3
+      ? 'ok'
+      : minPointCount >= 1 || minManualCount >= targetSamples
+        ? 'warn'
+        : 'risk'
+  const qualityStatus: FieldReadinessStatus =
+    pointComparisons.length === 0
+      ? 'warn'
+      : sinrCount === pointComparisons.length && throughputCount === pointComparisons.length
+        ? 'ok'
+        : sinrCount > 0 || throughputCount > 0
+          ? 'warn'
+          : 'risk'
+
+  return [
+    {
+      id: 'site-memo',
+      label: '現地条件メモ',
+      value:
+        siteMemoParts.length === 0
+          ? '未入力'
+          : `${protocol.siteName || '現地名未入力'} / ${protocol.antennaDirection || '方位未入力'}`,
+      status: siteStatus,
+      action:
+        siteStatus === 'ok'
+          ? '基地局方位、受信点、斜め窓などの説明材料が揃っています。'
+          : '試験場所、基地局方位、受信点、窓面のメモを追記してください。',
+    },
+    {
+      id: 'geometry-height',
+      label: '距離・高さ条件',
+      value: `屋外 ${formatMeters(settings.outdoorDistanceM)} / 受信高 ${formatMeters(
+        settings.rxAntennaHeightM,
+      )} / 測定高 ${formatMeters(protocol.measurementHeightM)}`,
+      status: geometryStatus,
+      action:
+        geometryStatus === 'ok'
+          ? '3D距離と測定高さの説明に使えます。'
+          : '送信高、窓中心高、受信高、測定高さを同じ座標感で合わせてください。',
+    },
+    {
+      id: 'window-namigate-geometry',
+      label: '窓・ナミゲート寸法',
+      value: `窓 ${numberFormatter.format(settings.windowWidthM)}×${numberFormatter.format(
+        settings.windowHeightM,
+      )}m / NG ${numberFormatter.format(settings.namigateWidthCm)}×${numberFormatter.format(
+        settings.namigateHeightCm,
+      )}cm`,
+      status: hasWindowGeometry && hasNamigateGeometry ? 'ok' : 'risk',
+      action:
+        hasWindowGeometry && hasNamigateGeometry
+          ? '図面、3D表示、面積補正の前提として使えます。'
+          : '窓寸法、窓中心高、ナミゲート寸法を現地値に合わせてください。',
+    },
+    {
+      id: 'three-state-samples',
+      label: '3状態測定の揃い',
+      value: `手入力 ${manualText} / CSV ${csvText}`,
+      status: sampleStatus,
+      action:
+        sampleStatus === 'ok'
+          ? '3状態のdB差分を比較できる状態です。'
+          : '窓開放相当、窓閉鎖、窓閉鎖＋ナミゲートありを同一点で揃えてください。',
+    },
+    {
+      id: 'sample-plan',
+      label: 'N数・平均化時間',
+      value: `N=${numberFormatter.format(protocol.observationCount)} / ${numberFormatter.format(
+        protocol.averagingSeconds,
+      )}秒`,
+      status: planStatus,
+      action:
+        planStatus === 'ok'
+          ? '比較評価に使いやすい測定計画です。'
+          : 'N=30、平均30秒を目安にし、各状態で同じ条件にしてください。',
+    },
+    {
+      id: 'fixed-conditions',
+      label: '同一条件固定',
+      value: `${fixedConditionCount}/4 固定 / チェック ${checklistCount}/6`,
+      status:
+        fixedConditionCount === 4 && checklistCount >= 5
+          ? 'ok'
+          : checklistCount >= 3
+            ? 'warn'
+            : 'risk',
+      action:
+        fixedConditionCount === 4 && checklistCount >= 5
+          ? '端末、測定高、向き、窓位置の固定が説明できます。'
+          : '同一端末、同一高さ、同一向き、窓・ナミゲート位置固定を確認してください。',
+    },
+    {
+      id: 'theory-inputs',
+      label: '外部理論値の比較',
+      value: `${theoryCount}/3 状態`,
+      status: theoryCount === 3 ? 'ok' : theoryCount > 0 ? 'warn' : 'risk',
+      action:
+        theoryCount === 3
+          ? '外部理論、推定、実測の3者比較が可能です。'
+          : '外部計算値がある場合は3状態分を入れると考察が強くなります。',
+    },
+    {
+      id: 'csv-balance',
+      label: 'CSV点数バランス',
+      value: csvText,
+      status: csvStatus,
+      action:
+        csvStatus === 'ok'
+          ? '状態別の場所依存や外れ値を比較できます。'
+          : 'CSVを使う場合は、各状態で同じ測定点数に近づけてください。',
+    },
+    {
+      id: 'quality-kpi',
+      label: '品質KPI記録',
+      value: `SINR ${formatRecordRatio(sinrCount, pointComparisons.length)} / DLUL ${formatRecordRatio(
+        throughputCount,
+        pointComparisons.length,
+      )}`,
+      status: qualityStatus,
+      action:
+        qualityStatus === 'ok'
+          ? 'RSRP改善と通信品質の関係を説明できます。'
+          : 'RSRPに加え、SINR、RSRQ、DL/ULスループットも同じ点で記録してください。',
+    },
+  ] satisfies FieldReadinessItem[]
+}
+
+function buildMeasurementSequenceItems({
+  protocol,
+  measuredSampleStats,
+  theoryComparisons,
+  pointComparisons,
+}: {
+  protocol: TestProtocol
+  measuredSampleStats: Record<ScenarioKey, RsrpSampleStats>
+  theoryComparisons: TheoryComparison[]
+  pointComparisons: PointComparison[]
+}) {
+  const targetSamples = Math.max(protocol.observationCount, 1)
+  const pointCounts = scenarioPointCounts(pointComparisons)
+  const titles: Record<ScenarioKey, string> = {
+    noWindow: '1. 窓開放相当を測る',
+    withWindow: '2. 窓閉鎖・ナミゲートなし',
+    withNamigate: '3. 窓閉鎖・ナミゲートあり',
+  }
+  const instructions: Record<ScenarioKey, string> = {
+    noWindow:
+      '窓を開ける、または窓損失を除いた基準状態として、端末高さと向きを固定して測定します。',
+    withWindow:
+      '同じ位置で窓を閉め、ナミゲートを付けずに測定します。窓損失と入射角影響の基準になります。',
+    withNamigate:
+      '窓閉鎖のままナミゲートを設置し、同一点で測定します。改善量dBと回復率の主データです。',
+  }
+  const scenarioItems = SCENARIOS.map((scenario) => {
+    const manualCount = measuredSampleStats[scenario.key].count
+    const csvCount = pointCounts[scenario.key]
+    const bestCount = Math.max(manualCount, csvCount)
+    const status: FieldReadinessStatus =
+      bestCount >= targetSamples ? 'ok' : bestCount > 0 ? 'warn' : 'risk'
+
+    return {
+      id: scenario.key,
+      title: titles[scenario.key],
+      scenarioLabel: scenario.label,
+      status,
+      sampleText: `手入力N=${numberFormatter.format(manualCount)} / CSV ${numberFormatter.format(
+        csvCount,
+      )}点 / 目標N=${numberFormatter.format(targetSamples)}`,
+      instruction: instructions[scenario.key],
+    }
+  })
+  const theoryCount = theoryComparisons.filter(
+    (comparison) => comparison.theoryRsrpDbm !== null,
+  ).length
+  const theoryStatus: FieldReadinessStatus =
+    theoryCount === 3 && pointComparisons.length > 0
+      ? 'ok'
+      : theoryCount > 0 || pointComparisons.length > 0
+        ? 'warn'
+        : 'risk'
+
+  return [
+    ...scenarioItems,
+    {
+      id: 'theory-quality',
+      title: '4. 理論値・品質指標を揃える',
+      scenarioLabel: '比較資料',
+      status: theoryStatus,
+      sampleText: `外部理論 ${theoryCount}/3 / CSV ${numberFormatter.format(
+        pointComparisons.length,
+      )}点`,
+      instruction:
+        '外部理論RSRP、SINR、RSRQ、DL/ULスループット、写真や設置メモを揃えると、報告後のAI分析と再測定がしやすくなります。',
+    },
+  ] satisfies MeasurementSequenceItem[]
+}
+
 function getHeatColor(rsrpDbm: number, thresholdDbm: number) {
   const delta = rsrpDbm - thresholdDbm
 
@@ -3149,6 +3517,8 @@ function buildPrintReportHtml({
   scenarioResults,
   fieldEffectRows,
   fieldAidItems,
+  fieldReadinessItems,
+  fieldReadinessSummary,
   effectiveWindowLossDb,
   angleLossDb,
   totalNamigateGainDb,
@@ -3166,6 +3536,8 @@ function buildPrintReportHtml({
   scenarioResults: ScenarioResult[]
   fieldEffectRows: EffectSummaryRow[]
   fieldAidItems: FieldAidItem[]
+  fieldReadinessItems: FieldReadinessItem[]
+  fieldReadinessSummary: FieldReadinessSummary
   effectiveWindowLossDb: number
   angleLossDb: number
   totalNamigateGainDb: number
@@ -3218,6 +3590,17 @@ function buildPrintReportHtml({
         )}</li>`,
     )
     .join('')
+  const readinessRows = fieldReadinessItems
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.label)}</td>
+          <td>${escapeHtml(item.value)}</td>
+          <td>${escapeHtml(statusLabel(item.status))}</td>
+          <td>${escapeHtml(item.action)}</td>
+        </tr>`,
+    )
+    .join('')
 
   return `<!doctype html>
   <html lang="ja">
@@ -3242,6 +3625,8 @@ function buildPrintReportHtml({
         th { background: #eef7fc; color: #15354a; }
         ul { margin-top: 6px; padding-left: 18px; font-size: 12px; line-height: 1.7; }
         .comment { border-left: 4px solid ${MAIN_COLOR}; background: #f1f8fc; padding: 12px 14px; line-height: 1.7; }
+        .readiness { border: 1px solid #d8e3ec; border-left: 4px solid ${MAIN_COLOR}; border-radius: 8px; padding: 12px 14px; background: #f8fbfd; margin: 14px 0; }
+        .readiness strong { color: #12364f; font-size: 18px; }
         .disclaimer { border: 1px solid #cbdbe7; border-radius: 8px; padding: 12px 14px; background: #f7fafc; line-height: 1.7; }
         .actions { margin: 16px 0 22px; }
         button { background: ${MAIN_COLOR}; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
@@ -3300,6 +3685,17 @@ function buildPrintReportHtml({
         </table>
         <h2>営業説明用コメント</h2>
         <p class="comment">${escapeHtml(salesComment)}</p>
+        <h2>実地試験準備サマリー</h2>
+        <div class="readiness">
+          <strong>準備度 ${escapeHtml(
+            `${numberFormatter.format(fieldReadinessSummary.scorePercent)}%`,
+          )} / ${escapeHtml(statusLabel(fieldReadinessSummary.status))}</strong>
+          <p class="meta">${escapeHtml(fieldReadinessSummary.label)}</p>
+        </div>
+        <table>
+          <thead><tr><th>確認項目</th><th>現在値</th><th>状態</th><th>現地での確認</th></tr></thead>
+          <tbody>${readinessRows}</tbody>
+        </table>
         <h2>技術メモ</h2>
         <table>
           <thead><tr><th>項目</th><th>アプリモデル</th><th>実測</th><th>外部理論</th><th>読み方</th></tr></thead>
@@ -3478,6 +3874,91 @@ function FieldAidPanel({ items }: { items: FieldAidItem[] }) {
           </article>
         ))}
       </div>
+    </section>
+  )
+}
+
+function FieldReadinessPanel({
+  items,
+  summary,
+  sequenceItems,
+  compact = false,
+  ariaLabel,
+}: {
+  items: FieldReadinessItem[]
+  summary: FieldReadinessSummary
+  sequenceItems?: MeasurementSequenceItem[]
+  compact?: boolean
+  ariaLabel: string
+}) {
+  const displayItems = compact ? items.slice(0, 6) : items
+  const nextActions = items.filter((item) => item.status !== 'ok').slice(0, compact ? 3 : 5)
+
+  return (
+    <section
+      aria-label={ariaLabel}
+      className={`field-readiness-panel is-${summary.status}${
+        compact ? ' is-compact' : ''
+      }`}
+    >
+      <div className="readiness-header">
+        <div>
+          <p className="panel-kicker">実地試験準備</p>
+          <h3>現場で比較できる状態かを確認</h3>
+          <span>
+            {summary.label} / OK {numberFormatter.format(summary.okCount)}・要確認{' '}
+            {numberFormatter.format(summary.warnCount)}・要準備{' '}
+            {numberFormatter.format(summary.riskCount)}
+          </span>
+        </div>
+        <div className={`readiness-score is-${summary.status}`}>
+          <span>準備度</span>
+          <strong>{numberFormatter.format(summary.scorePercent)}%</strong>
+          <small>{statusLabel(summary.status)}</small>
+        </div>
+      </div>
+
+      <div className="readiness-grid">
+        {displayItems.map((item) => (
+          <article className={`readiness-card is-${item.status}`} key={item.id}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.action}</small>
+          </article>
+        ))}
+      </div>
+
+      {sequenceItems && !compact ? (
+        <div className="measurement-sequence" aria-label="現地測定手順">
+          <div className="subsection-heading">
+            <h3>現地測定手順</h3>
+            <span>同一点・同一高さ・同一向きで順番に測る</span>
+          </div>
+          <div className="sequence-grid">
+            {sequenceItems.map((item) => (
+              <article className={`sequence-card is-${item.status}`} key={item.id}>
+                <span>{item.title}</span>
+                <strong>{item.scenarioLabel}</strong>
+                <em>{item.sampleText}</em>
+                <small>{item.instruction}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {nextActions.length > 0 ? (
+        <div className="readiness-actions">
+          <strong>次に確認すること</strong>
+          <div>
+            {nextActions.map((item) => (
+              <span className={`is-${item.status}`} key={item.id}>
+                {item.label}: {item.action}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -6124,6 +6605,34 @@ function App() {
     ],
   )
 
+  const fieldReadinessItems = useMemo(
+    () =>
+      buildFieldReadinessItems({
+        settings,
+        protocol,
+        measuredSampleStats,
+        theoryComparisons,
+        pointComparisons,
+      }),
+    [measuredSampleStats, pointComparisons, protocol, settings, theoryComparisons],
+  )
+
+  const fieldReadinessSummary = useMemo(
+    () => summarizeFieldReadiness(fieldReadinessItems),
+    [fieldReadinessItems],
+  )
+
+  const measurementSequenceItems = useMemo(
+    () =>
+      buildMeasurementSequenceItems({
+        protocol,
+        measuredSampleStats,
+        theoryComparisons,
+        pointComparisons,
+      }),
+    [measuredSampleStats, pointComparisons, protocol, theoryComparisons],
+  )
+
   const aiAnalysisText = useMemo(
     () =>
       buildAiAnalysisText({
@@ -6431,6 +6940,8 @@ function App() {
         scenarioResults,
         fieldEffectRows,
         fieldAidItems,
+        fieldReadinessItems,
+        fieldReadinessSummary,
         effectiveWindowLossDb,
         angleLossDb,
         totalNamigateGainDb,
@@ -6453,6 +6964,8 @@ function App() {
       effectiveWindowLossDb,
       fieldAidItems,
       fieldEffectRows,
+      fieldReadinessItems,
+      fieldReadinessSummary,
       protocol,
       receiverAdjustmentDb,
       recoveryRate,
@@ -8077,6 +8590,12 @@ function App() {
               <span>営業説明用コメント</span>
               <p>{salesComment}</p>
             </div>
+            <FieldReadinessPanel
+              ariaLabel="実地試験準備サマリー"
+              compact
+              items={fieldReadinessItems}
+              summary={fieldReadinessSummary}
+            />
             <div className="sales-detail-list" aria-label="簡易モードの主要条件">
               <span>間取り {getRoomLayoutPresetLabel(settings.roomLayoutPresetId)}</span>
               <span>建材 {getBuildingMaterialPresetLabel(settings.buildingMaterialPresetId)}</span>
@@ -8259,6 +8778,13 @@ function App() {
             </div>
 
             <div className="measurement-body">
+              <FieldReadinessPanel
+                ariaLabel="実地試験準備"
+                items={fieldReadinessItems}
+                sequenceItems={measurementSequenceItems}
+                summary={fieldReadinessSummary}
+              />
+
               <div className="measurement-input-grid">
                 {SCENARIOS.map((scenario) => (
                   <MeasurementSampleInput

@@ -6080,14 +6080,36 @@ function HeatmapPlan({
   const windowYPct = clamp((windowPosition.yM / roomDepthM) * 100, 0, 92)
   const safeAngle = getSafeIncidentAngleDeg(settings.incidentAngleDeg)
   const normalOffsetDeg = getNormalOffsetAngleDeg(settings.incidentAngleDeg)
-  const transmitterXPct = clamp(
-    windowXPct +
-      faceGeometry.outwardNormal.xM * 26 -
-      faceGeometry.tangent.xM *
-        Math.tan(((90 - safeAngle) * Math.PI) / 180) *
-        22,
-    10,
-    90,
+  const normalOffsetRad = (normalOffsetDeg * Math.PI) / 180
+  const normalOffsetTan = Math.tan(normalOffsetRad)
+  const baseIncidentNormalM = clamp(
+    Math.max(settings.windowWidthM * 0.65, Math.min(roomWidthM, roomDepthM) * 0.18),
+    0.85,
+    2.7,
+  )
+  const lateralLimitM = Math.min(roomWidthM, roomDepthM) * 0.32
+  const incidentNormalDistanceM =
+    normalOffsetTan <= 0.001
+      ? baseIncidentNormalM
+      : Math.max(0.65, Math.min(baseIncidentNormalM, lateralLimitM / normalOffsetTan))
+  const incidentRayLocal = getIncidentRayLocalPoint(safeAngle, incidentNormalDistanceM)
+  const incidentStartM = {
+    xM:
+      windowPosition.xM +
+      faceGeometry.tangent.xM * incidentRayLocal.uM +
+      faceGeometry.inwardNormal.xM * incidentRayLocal.vM,
+    yM:
+      windowPosition.yM +
+      faceGeometry.tangent.yM * incidentRayLocal.uM +
+      faceGeometry.inwardNormal.yM * incidentRayLocal.vM,
+  }
+  const incidentStartXPct = (incidentStartM.xM / roomWidthM) * 100
+  const incidentStartYPct = (incidentStartM.yM / roomDepthM) * 100
+  const incidentLabelXPct = clamp((incidentStartXPct + windowXPct) / 2, 12, 88)
+  const incidentLabelYPct = clamp(
+    Math.min(incidentStartYPct, windowYPct) + 9,
+    6,
+    22,
   )
   const receiverXPct = clamp((receiverPosition.xM / roomWidthM) * 100, 3, 97)
   const receiverYPct = clamp((receiverPosition.yM / roomDepthM) * 100, 4, 96)
@@ -6127,30 +6149,10 @@ function HeatmapPlan({
   return (
     <div className="heatmap-plan">
       <div className="heatmap-outdoor" aria-hidden="true">
-        <span
-          className="heatmap-device heatmap-transmitter"
-          style={{ left: `${transmitterXPct}%` }}
-        >
-          送信機
+        <span className="heatmap-device heatmap-transmitter">送信機側</span>
+        <span className="heatmap-outdoor-angle">
+          入射方向は下図の矢印 / 窓面との角度 {numberFormatter.format(safeAngle)}°
         </span>
-        <svg className="heatmap-outdoor-ray" viewBox="0 0 100 56">
-          <line
-            x1={transmitterXPct}
-            y1="18"
-            x2={windowXPct}
-            y2="56"
-            stroke={scenario.color}
-            strokeLinecap="round"
-            strokeWidth="2.8"
-          />
-          <text
-            className="heatmap-outdoor-label"
-            x={(transmitterXPct + windowXPct) / 2}
-            y="38"
-          >
-            窓面入射 {numberFormatter.format(safeAngle)}°
-          </text>
-        </svg>
         <span className="heatmap-outdoor-distance">
           屋外3D {formatMeters(calculateOutdoorLinkDistanceM(settings))} / 法線ずれ{' '}
           {numberFormatter.format(normalOffsetDeg)}°
@@ -6202,6 +6204,18 @@ function HeatmapPlan({
         </div>
 
         <svg className="heatmap-overlay" viewBox="0 0 100 100" aria-hidden="true">
+          <defs>
+            <marker
+              id={`heatmap-incident-arrow-${scenario.key}`}
+              markerHeight="5"
+              markerWidth="6"
+              orient="auto"
+              refX="5.5"
+              refY="2.5"
+            >
+              <path d="M0,0 L6,2.5 L0,5 Z" fill="#c96c34" />
+            </marker>
+          </defs>
           <line
             className="heatmap-wall-line"
             x1={isNotched ? notchWidthPct : 0}
@@ -6341,6 +6355,19 @@ function HeatmapPlan({
               ナミゲート {numberFormatter.format(settings.namigateWidthCm)}cm
             </text>
           ) : null}
+          <path
+            className="heatmap-incident-ray"
+            d={`M ${incidentStartXPct} ${incidentStartYPct} L ${windowXPct} ${windowYPct}`}
+            markerEnd={`url(#heatmap-incident-arrow-${scenario.key})`}
+          />
+          <text
+            className="heatmap-incident-label"
+            textAnchor="middle"
+            x={incidentLabelXPct}
+            y={incidentLabelYPct}
+          >
+            窓面との角度 {numberFormatter.format(safeAngle)}°
+          </text>
           {scenarioMeasurements.map((point) => {
             const xPct = clamp((point.xM / roomWidthM) * 100, 3, 97)
             const yPct = clamp((point.yM / roomDepthM) * 100, 4, 96)

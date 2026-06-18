@@ -2809,9 +2809,21 @@
 }
 
 .heatmap-transmitter {
+  left: 58px;
   top: 8px;
   background: #16212c;
   box-shadow: 0 6px 14px rgba(22, 33, 44, 0.2);
+}
+
+.heatmap-outdoor-angle {
+  position: absolute;
+  left: 112px;
+  right: 12px;
+  top: 13px;
+  color: #384757;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
 }
 
 .heatmap-outdoor-distance {
@@ -3084,6 +3096,25 @@
   stroke-linecap: round;
   stroke-width: 2.2;
   stroke-dasharray: 3 2;
+}
+
+.heatmap-incident-ray {
+  fill: none;
+  stroke: #c96c34;
+  stroke-linecap: round;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 1px 1px rgba(16, 24, 32, 0.16));
+}
+
+.heatmap-incident-label {
+  fill: #c96c34;
+  font-size: 4.8px;
+  font-weight: 900;
+  letter-spacing: 0;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-linejoin: round;
+  stroke-width: 1.1px;
 }
 
 .heatmap-dimension-line {
